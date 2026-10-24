@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F4E3D">
+<title>Sanidad en campo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=1.0">
+</head>
+<body>
+
+<!-- ============ INGRESO ============ -->
+<section id="v-ingreso" class="vista" hidden>
+  <div class="ingreso">
+    <img src="icons/icon-192.png" alt="" class="ingreso-logo" width="64" height="64">
+    <h1>Sanidad Vegetal</h1>
+    <p class="ingreso-sub">Escribe tu PIN de 6 números</p>
+
+    <div class="pin-puntos" id="pin-puntos" aria-live="polite">
+      <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <p class="ingreso-error" id="ingreso-error" role="alert"></p>
+
+    <div class="teclado" id="teclado">
+      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+      <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+      <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+      <span></span><button type="button" data-k="0">0</button><button type="button" data-k="borrar" aria-label="Borrar">⌫</button>
+    </div>
+
+    <details class="ingreso-config" id="ingreso-config">
+      <summary>Dirección de conexión</summary>
+      <label class="campo">
+        <span>Pega la dirección que termina en /exec</span>
+        <input type="url" id="cfg-url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec">
+      </label>
+    </details>
+  </div>
+</section>
+
+<!-- ============ PRINCIPAL ============ -->
+<section id="v-app" class="vista" hidden>
+  <header class="barra">
+    <div class="barra-quien">
+      <strong id="lider-nombre">—</strong>
+      <span id="lider-labor"></span>
+    </div>
+    <button type="button" class="barra-menu" id="btn-menu" aria-label="Opciones">⋮</button>
+  </header>
+
+  <button type="button" class="estado-envio" id="estado-envio" data-estado="ok">
+    <span class="estado-num" id="estado-num">0</span>
+    <span class="estado-txt" id="estado-txt">Todo enviado</span>
+  </button>
+
+  <main>
+    <!-- ---------- LABOR ---------- -->
+    <form id="f-labor" class="panel" data-panel="labor" novalidate>
+      <div class="fila-2">
+        <label class="campo">
+          <span>Fecha</span>
+          <input type="date" id="l-fecha" required>
+        </label>
+        <label class="campo">
+          <span>Labor</span>
+          <select id="l-labor"></select>
+        </label>
+      </div>
+
+      <fieldset class="campo">
+        <legend>Proyecto</legend>
+        <div class="chips" id="l-proyectos"></div>
+      </fieldset>
+
+      <fieldset class="campo">
+        <legend>Lotes <small id="l-lotes-ayuda">toca uno o varios</small></legend>
+        <div class="lotes" id="l-lotes"></div>
+        <p class="leyenda"><span class="marca-g">G</span> Guineensis</p>
+      </fieldset>
+
+      <fieldset class="campo">
+        <legend>Estado</legend>
+        <div class="estados" id="l-estados"></div>
+      </fieldset>
+
+      <div id="l-detalle" class="detalle" hidden></div>
+
+      <label class="campo">
+        <span>Observaciones</span>
+        <textarea id="l-obs" rows="2" placeholder="Opcional"></textarea>
+      </label>
+
+      <p class="form-error" id="l-error" role="alert"></p>
+      <button type="submit" class="btn-principal" id="l-guardar">Guardar labor</button>
+    </form>
+
+    <!-- ---------- NOVEDAD ---------- -->
+    <form id="f-novedad" class="panel" data-panel="novedad" novalidate hidden>
+      <label class="campo">
+        <span>Fecha</span>
+        <input type="date" id="n-fecha" required>
+      </label>
+
+      <fieldset class="campo">
+        <legend>Tipo de novedad</legend>
+        <div class="chips chips-tipo" id="n-tipos"></div>
+      </fieldset>
+
+      <div class="fila-2">
+        <label class="campo">
+          <span>Proyecto</span>
+          <select id="n-proyecto"><option value="">Ninguno</option></select>
+        </label>
+        <label class="campo">
+          <span>Lote</span>
+          <select id="n-lote" disabled><option value="">Ninguno</option></select>
+        </label>
+      </div>
+
+      <label class="campo">
+        <span>Qué pasó</span>
+        <textarea id="n-desc" rows="3" placeholder="Ej: foco de PC en línea 12, palma 8"></textarea>
+      </label>
+      <label class="campo">
+        <span>Qué se hizo</span>
+        <textarea id="n-accion" rows="2" placeholder="Opcional"></textarea>
+      </label>
+
+      <p class="form-error" id="n-error" role="alert"></p>
+      <button type="submit" class="btn-principal">Guardar novedad</button>
+    </form>
+
+    <!-- ---------- ENVÍOS ---------- -->
+    <section class="panel" data-panel="envios" hidden>
+      <div class="envios-acciones">
+        <button type="button" class="btn-sec" id="btn-enviar">Enviar ahora</button>
+      </div>
+      <h2 class="envios-titulo">Por enviar</h2>
+      <ul class="lista" id="lista-cola"></ul>
+      <h2 class="envios-titulo">Enviados</h2>
+      <ul class="lista" id="lista-enviados"></ul>
+      <p class="nota">Para corregir algo ya enviado, avísale al coordinador.</p>
+    </section>
+  </main>
+
+  <nav class="pestanas" role="tablist">
+    <button type="button" role="tab" data-ir="labor" aria-selected="true">Labor</button>
+    <button type="button" role="tab" data-ir="novedad" aria-selected="false">Novedad</button>
+    <button type="button" role="tab" data-ir="envios" aria-selected="false">Envíos <span class="pestana-num" id="pestana-num" hidden>0</span></button>
+  </nav>
+</section>
+
+<!-- Menú -->
+<dialog id="menu" class="menu">
+  <form method="dialog">
+    <p class="menu-info" id="menu-info"></p>
+    <button type="button" class="btn-sec" id="btn-actualizar">Actualizar lotes</button>
+    <button type="button" class="btn-sec" id="btn-salir">Salir</button>
+    <button value="cerrar" class="btn-texto">Cerrar</button>
+  </form>
+</dialog>
+
+<div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+
+<script src="config.js?v=1.0"></script>
+<script src="js/app.js?v=1.0"></script>
+</body>
+</html>
