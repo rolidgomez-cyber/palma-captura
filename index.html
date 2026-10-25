@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=1.0">
+<link rel="stylesheet" href="css/app.css?v=1.1">
 </head>
 <body>
 
@@ -20,7 +20,7 @@
   <div class="ingreso">
     <img src="icons/icon-192.png" alt="" class="ingreso-logo" width="64" height="64">
     <h1>Sanidad Vegetal</h1>
-    <p class="ingreso-sub">Escribe tu PIN de 6 números</p>
+    <p class="ingreso-sub" id="ingreso-sub">Escribe tu PIN de 6 números</p>
 
     <div class="pin-puntos" id="pin-puntos" aria-live="polite">
       <span></span><span></span><span></span><span></span><span></span><span></span>
@@ -33,6 +33,8 @@
       <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
       <span></span><button type="button" data-k="0">0</button><button type="button" data-k="borrar" aria-label="Borrar">⌫</button>
     </div>
+
+    <button type="button" class="ingreso-volver" id="ingreso-volver" hidden>Volver</button>
 
     <details class="ingreso-config" id="ingreso-config">
       <summary>Dirección de conexión</summary>
@@ -145,7 +147,7 @@
       <ul class="lista" id="lista-cola"></ul>
       <h2 class="envios-titulo">Enviados</h2>
       <ul class="lista" id="lista-enviados"></ul>
-      <p class="nota">Para corregir algo ya enviado, avísale al coordinador.</p>
+      <p class="nota">Lo enviado llega al coordinador, que lo revisa antes de pasarlo a la hoja. Para corregir algo ya enviado, avísale.</p>
     </section>
   </main>
 
@@ -166,9 +168,21 @@
   </form>
 </dialog>
 
+<!-- Confirmación antes de guardar -->
+<dialog id="confirmar" class="menu confirmar">
+  <form method="dialog">
+    <h2 class="conf-titulo">Revisa antes de guardar</h2>
+    <p class="conf-sub" id="conf-sub"></p>
+    <ul class="conf-lista" id="conf-lista"></ul>
+    <div class="conf-avisos" id="conf-avisos" hidden></div>
+    <button value="ok" class="btn-principal">Confirmar y guardar</button>
+    <button value="no" class="btn-texto">Corregir</button>
+  </form>
+</dialog>
+
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
-<script src="config.js?v=1.0"></script>
-<script src="js/app.js?v=1.0"></script>
+<script src="config.js?v=1.1"></script>
+<script src="js/app.js?v=1.1"></script>
 </body>
 </html>

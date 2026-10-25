@@ -10,6 +10,8 @@
   const K = { cfg: 'captura_cfg', sesion: 'captura_sesion', cola: 'captura_cola', enviados: 'captura_enviados', ultimo: 'captura_ultimo' };
   const CANTIDAD = { 'Control PC': 'Cirugías', 'Control Strategus': 'Controles / galerías' };
   const MAX_ENVIADOS = 150;
+  const LIMITE_CANTIDAD = 300;   // cirugías o controles por lote en un día
+  let modoCambioPin = false;
   const $ = (id) => document.getElementById(id);
 
   // ---------- Almacenamiento ----------
@@ -100,11 +102,19 @@
       const r = await pedir(url + (url.includes('?') ? '&' : '?') + 'action=captura&pin=' + encodeURIComponent(pin));
       if (!r.ok) { errorIngreso(r.error === 'PIN no válido o inactivo' ? 'PIN incorrecto o desactivado.' : (r.error || 'No se pudo entrar.')); return; }
       if (!window.PUENTE_URL) { cfg.url = url; guardar(K.cfg, cfg); }
+      const antes = sesion && sesion.lider ? sesion.lider.nombre : '';
       sesion = { pin: pin, lider: r.lider, lotes: r.lotes || [], labores: r.labores || [], estados: r.estados || [], tipos: r.tipos || [], actualizado: Date.now() };
       guardar(K.sesion, sesion);
       pin = ''; pintarPin();
       $('ingreso-error').textContent = '';
+      const eraCambio = modoCambioPin;
+      modoCambioPin = false;
+      ultimoFallo = '';
       iniciarApp();
+      if (eraCambio) {
+        avisar(antes && antes !== r.lider.nombre ? 'Entraste como ' + r.lider.nombre + '. Enviando lo pendiente.' : 'PIN actualizado. Enviando lo pendiente.');
+        enviar(true);
+      }
     } catch (e) {
       errorIngreso('No hubo respuesta. Revisa la señal e intenta otra vez.');
     } finally {
@@ -142,6 +152,33 @@
   }
   function estados() { return (sesion.estados && sesion.estados.length) ? sesion.estados : ['Terminado', 'En avance', 'Revisión']; }
   function tipos() { return (sesion.tipos && sesion.tipos.length) ? sesion.tipos : ['Foco PC', 'Plaga', 'Strategus', 'Clima / día perdido', 'Seguridad', 'Otro']; }
+
+  // ---------- Confirmación antes de guardar ----------
+  function confirmar(sub, lineas, avisos) {
+    return new Promise((ok) => {
+      const d = $('confirmar');
+      $('conf-sub').textContent = sub;
+      const ul = $('conf-lista');
+      ul.innerHTML = '';
+      lineas.forEach((l) => ul.appendChild(el('li', {}, l)));
+      const av = $('conf-avisos');
+      av.innerHTML = '';
+      av.hidden = !avisos.length;
+      avisos.forEach((a) => av.appendChild(el('p', { text: '⚠ ' + a })));
+      d.returnValue = '';
+      d.addEventListener('close', () => ok(d.returnValue === 'ok'), { once: true });
+      d.showModal();
+    });
+  }
+  function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function diasAtras(fecha) {
+    return Math.round((new Date(hoy() + 'T12:00:00') - new Date(fecha + 'T12:00:00')) / 86400000);
+  }
+  function yaTerminado(labor, loteId, fecha) {
+    const mes = fecha.slice(0, 7);
+    return cola.concat(enviados).find((x) => x.tipo === 'registro' && x.labor === labor && x.lote === loteId &&
+      x.estado === 'Terminado' && String(x.fecha || '').slice(0, 7) === mes);
+  }
 
   // ---------- Formulario de labor ----------
   const fl = { proyecto: '', lotes: [], estado: '' };
@@ -230,7 +267,7 @@
   });
   $('l-labor').addEventListener('change', pintarDetalle);
 
-  $('f-labor').addEventListener('submit', (ev) => {
+  $('f-labor').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const err = $('l-error');
     const fecha = $('l-fecha').value;
@@ -262,6 +299,25 @@
         _creado: Date.now()
       };
     });
+    // resumen y avisos antes de guardar
+    const avisos = [];
+    const dAtras = diasAtras(fecha);
+    if (dAtras > 3) avisos.push('La fecha es de hace ' + dAtras + ' días. ¿Es correcta?');
+    const lineasConf = nuevos.map((it) => {
+      const l = lotePorId(it.lote);
+      const nom = 'Lote ' + loteCorto(l.lote) + ' (' + proyectoCorto(l.proyecto) + ')';
+      if (etiqueta && it.cantidad > LIMITE_CANTIDAD) avisos.push(nom + ': ' + it.cantidad + ' ' + etiqueta.toLowerCase() + ' es mucho para un día. Revisa el número.');
+      if (labor === 'Control PC' && !/guin/i.test(l.material)) avisos.push(nom + ' es Híbrido. El control de PC se hace en Guineensis.');
+      if (it.estado === 'Terminado' && labor !== 'Control PC') {
+        const prev = yaTerminado(labor, it.lote, fecha);
+        if (prev) avisos.push(nom + ' ya lo enviaste como Terminado el ' + fechaCorta(prev.fecha) + '.');
+      }
+      return '<b>' + esc(nom) + '</b><br>' + esc(it.estado) + (etiqueta ? ', ' + it.cantidad + ' ' + etiqueta.toLowerCase() : '') +
+        (it.tramo ? ', líneas ' + esc(it.tramo) : '');
+    });
+    const okConf = await confirmar(labor + ', ' + fechaCorta(fecha), lineasConf, avisos);
+    if (!okConf) return;
+
     cola = cola.concat(nuevos);
     if (!guardar(K.cola, cola)) return;
     ultimo = { labor: labor, proyecto: fl.proyecto };
@@ -303,7 +359,7 @@
     fn.tipo = b.dataset.t;
     [...$('n-tipos').children].forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.t === fn.tipo)));
   });
-  $('f-novedad').addEventListener('submit', (ev) => {
+  $('f-novedad').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const err = $('n-error');
     err.textContent = '';
@@ -315,6 +371,10 @@
     if (!desc) { $('n-desc').focus(); return (err.textContent = 'Cuenta qué pasó.'); }
     const loteId = $('n-lote').value;
     const l = loteId ? lotePorId(loteId) : null;
+    const avisosN = diasAtras(fecha) > 3 ? ['La fecha es de hace ' + diasAtras(fecha) + ' días. ¿Es correcta?'] : [];
+    const okN = await confirmar('Novedad, ' + fechaCorta(fecha), ['<b>' + esc(fn.tipo) + '</b>' +
+      (l ? ' en ' + esc(proyectoCorto(l.proyecto) + ' lote ' + loteCorto(l.lote)) : '') + '<br>' + esc(desc)], avisosN);
+    if (!okN) return;
     cola.push({
       uid: uid(), tipo: 'novedad', fecha: fecha, tipoNovedad: fn.tipo, lote: loteId,
       descripcion: desc, accion: $('n-accion').value.trim(),
@@ -353,7 +413,7 @@
       }, 45000);
       if (!r.ok) {
         ultimoFallo = /pin/i.test(r.error || '') ? 'pin' : 'hoja';
-        if (ultimoFallo === 'pin') avisar('Tu PIN fue desactivado. Habla con el coordinador.');
+        if (ultimoFallo === 'pin') avisar('Tu PIN ya no sirve. Toca la franja roja para escribir el nuevo.');
         return;
       }
       ultimoFallo = '';
@@ -364,7 +424,8 @@
       const salen = cola.filter((it) => ok.has(it.uid));
       cola = cola.filter((it) => !ok.has(it.uid));
       cola.forEach((it) => { if (errores[it.uid]) it._error = errores[it.uid]; });
-      enviados = salen.map((it) => ({ uid: it.uid, _txt: it._txt, _sub: it._sub, _enviado: ahora })).concat(enviados).slice(0, MAX_ENVIADOS);
+      enviados = salen.map((it) => ({ uid: it.uid, tipo: it.tipo, fecha: it.fecha, labor: it.labor, lote: it.lote, estado: it.estado,
+        _txt: it._txt, _sub: it._sub, _enviado: ahora })).concat(enviados).slice(0, MAX_ENVIADOS);
       guardar(K.cola, cola); guardar(K.enviados, enviados);
       if (salen.length && forzar) avisar(salen.length === 1 ? '1 envío llegó a la hoja.' : salen.length + ' envíos llegaron a la hoja.');
       if (cola.some((it) => !it._error)) setTimeout(() => enviar(), 500);
@@ -383,7 +444,7 @@
     const conError = cola.filter((it) => it._error).length;
     let estado = 'ok', txt = 'Todo enviado';
     if (enviando) { estado = 'enviando'; txt = 'Enviando…'; }
-    else if (ultimoFallo === 'pin') { estado = 'error'; txt = 'PIN desactivado. Habla con el coordinador'; }
+    else if (ultimoFallo === 'pin') { estado = 'error'; txt = 'Tu PIN cambió. Toca aquí para escribir el nuevo'; }
     else if (conError) { estado = 'error'; txt = conError === 1 ? '1 envío tiene un problema. Toca para ver' : conError + ' envíos tienen un problema. Toca para ver'; }
     else if (n && ultimoFallo === 'sin-senal') { estado = 'pendiente'; txt = 'Sin señal. Se envía solo cuando haya'; }
     else if (n && ultimoFallo === 'hoja') { estado = 'pendiente'; txt = 'La hoja no respondió. Se reintenta solo'; }
@@ -430,7 +491,11 @@
     if (!navigator.onLine) return avisar('Sin señal. Se envía solo cuando haya.');
     enviar(true);
   });
-  $('estado-envio').addEventListener('click', () => { irA('envios'); if (cola.length) enviar(true); });
+  $('estado-envio').addEventListener('click', () => {
+    if (ultimoFallo === 'pin') return pedirPinNuevo();
+    irA('envios');
+    if (cola.length) enviar(true);
+  });
 
   // ---------- Pestañas y menú ----------
   function irA(nombre) {
@@ -454,7 +519,11 @@
     avisar(r === true ? 'Lotes actualizados.' : r);
   });
   $('btn-salir').addEventListener('click', () => {
-    if (cola.length) { $('menu').close(); avisar('Hay ' + cola.length + ' sin enviar. Envíalos antes de salir.'); irA('envios'); return; }
+    if (cola.length) {
+      $('menu').close();
+      if (ultimoFallo === 'pin') return pedirPinNuevo();
+      avisar('Hay ' + cola.length + ' sin enviar. Envíalos antes de salir.'); irA('envios'); return;
+    }
     if (!confirm('¿Salir? Para volver a entrar necesitas tu PIN y señal.')) return;
     $('menu').close();
     sesion = null;
@@ -466,7 +535,7 @@
     if (!navigator.onLine) return 'Sin señal. Intenta en el campamento.';
     try {
       const r = await pedir(urlPuente() + '?action=captura&pin=' + encodeURIComponent(sesion.pin));
-      if (!r.ok) return 'Tu PIN fue desactivado. Habla con el coordinador.';
+      if (!r.ok) { ultimoFallo = 'pin'; pintarEstado(); return 'Tu PIN ya no sirve. Toca la franja roja para escribir el nuevo.'; }
       Object.assign(sesion, { lider: r.lider, lotes: r.lotes || sesion.lotes, labores: r.labores || sesion.labores,
         estados: r.estados || sesion.estados, tipos: r.tipos || sesion.tipos, actualizado: Date.now() });
       guardar(K.sesion, sesion);
@@ -488,9 +557,25 @@
   function mostrarIngreso() {
     $('v-app').hidden = true;
     $('v-ingreso').hidden = false;
+    pin = ''; pintarPin();
+    $('ingreso-volver').hidden = !modoCambioPin;
+    $('ingreso-sub').textContent = modoCambioPin
+      ? 'Escribe tu PIN nuevo. ' + (cola.length === 1 ? 'Tu registro sin enviar se conserva.' : cola.length ? 'Tus ' + cola.length + ' registros sin enviar se conservan.' : '')
+      : 'Escribe tu PIN de 6 números';
+    $('ingreso-error').textContent = '';
     $('cfg-url').value = window.PUENTE_URL ? '' : (cfg.url || '');
     $('ingreso-config').hidden = !!window.PUENTE_URL;
   }
+  function pedirPinNuevo() {
+    modoCambioPin = true;
+    mostrarIngreso();
+  }
+  $('ingreso-volver').addEventListener('click', () => {
+    modoCambioPin = false;
+    $('v-ingreso').hidden = true;
+    $('v-app').hidden = false;
+  });
+
   function iniciarApp() {
     $('v-ingreso').hidden = true;
     $('v-app').hidden = false;
