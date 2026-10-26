@@ -103,7 +103,7 @@
       if (!r.ok) { errorIngreso(r.error === 'PIN no válido o inactivo' ? 'PIN incorrecto o desactivado.' : (r.error || 'No se pudo entrar.')); return; }
       if (!window.PUENTE_URL) { cfg.url = url; guardar(K.cfg, cfg); }
       const antes = sesion && sesion.lider ? sesion.lider.nombre : '';
-      sesion = { pin: pin, lider: r.lider, lotes: r.lotes || [], labores: r.labores || [], estados: r.estados || [], tipos: r.tipos || [], actualizado: Date.now() };
+      sesion = { pin: pin, lider: r.lider, lotes: r.lotes || [], labores: r.labores || [], estados: r.estados || [], tipos: r.tipos || [], pcSiembraDesde: r.pcSiembraDesde || 0, actualizado: Date.now() };
       guardar(K.sesion, sesion);
       pin = ''; pintarPin();
       $('ingreso-error').textContent = '';
@@ -308,6 +308,7 @@
       const nom = 'Lote ' + loteCorto(l.lote) + ' (' + proyectoCorto(l.proyecto) + ')';
       if (etiqueta && it.cantidad > LIMITE_CANTIDAD) avisos.push(nom + ': ' + it.cantidad + ' ' + etiqueta.toLowerCase() + ' es mucho para un día. Revisa el número.');
       if (labor === 'Control PC' && !/guin/i.test(l.material)) avisos.push(nom + ' es Híbrido. El control de PC se hace en Guineensis.');
+      else if (labor === 'Control PC' && sesion.pcSiembraDesde && Number(l.siembra) >= sesion.pcSiembraDesde) avisos.push(nom + ' es siembra ' + l.siembra + '. Esos lotes aún no entran en control de PC.');
       if (it.estado === 'Terminado' && labor !== 'Control PC') {
         const prev = yaTerminado(labor, it.lote, fecha);
         if (prev) avisos.push(nom + ' ya lo enviaste como Terminado el ' + fechaCorta(prev.fecha) + '.');
@@ -536,7 +537,7 @@
     try {
       const r = await pedir(urlPuente() + '?action=captura&pin=' + encodeURIComponent(sesion.pin));
       if (!r.ok) { ultimoFallo = 'pin'; pintarEstado(); return 'Tu PIN ya no sirve. Toca la franja roja para escribir el nuevo.'; }
-      Object.assign(sesion, { lider: r.lider, lotes: r.lotes || sesion.lotes, labores: r.labores || sesion.labores,
+      Object.assign(sesion, { lider: r.lider, lotes: r.lotes || sesion.lotes, labores: r.labores || sesion.labores, pcSiembraDesde: r.pcSiembraDesde || sesion.pcSiembraDesde || 0,
         estados: r.estados || sesion.estados, tipos: r.tipos || sesion.tipos, actualizado: Date.now() });
       guardar(K.sesion, sesion);
       pintarCabecera();
