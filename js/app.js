@@ -1,13 +1,16 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
- * Habla con el puente de Apps Script v1.3:
+ * v1.4 (02/11/2026): listado de casos por lote (línea - palma) para Control PC, Censo y Strategus.
+ * Habla con el puente de Apps Script v2.9:
  *   GET  ?action=captura&pin=XXXXXX
+ *   GET  ?action=casos&pin=XXXXXX   (listados de casos, se guardan para usar sin señal)
  *   POST {pin, items:[{uid, tipo:'registro'|'novedad', ...}]}
  */
 (function () {
   'use strict';
 
-  const K = { cfg: 'captura_cfg', sesion: 'captura_sesion', cola: 'captura_cola', enviados: 'captura_enviados', ultimo: 'captura_ultimo' };
+  const K = { cfg: 'captura_cfg', sesion: 'captura_sesion', cola: 'captura_cola', enviados: 'captura_enviados', ultimo: 'captura_ultimo',
+             casos: 'captura_casos', marcas: 'captura_marcas' };
   const CANTIDAD = { 'Control PC': 'Cirugías', 'Control Strategus': 'Controles / galerías' };
   const MAX_ENVIADOS = 150;
   const LIMITE_CANTIDAD = 300;   // cirugías o controles por lote en un día
@@ -218,8 +221,10 @@
     lotesDe(fl.proyecto).forEach((l) => {
       const b = el('button', { type: 'button', class: 'lote', 'data-id': l.id, 'aria-pressed': String(fl.lotes.includes(l.id)),
         'aria-label': l.lote + ', ' + has(l.has) + ' hectáreas, ' + l.material });
+      const lc = listaDe($('l-labor').value, l.id);
       b.innerHTML = '<b>' + loteCorto(l.lote) + '</b><small>' + has(l.has) + ' ha</small>' +
-        (/guin/i.test(l.material) ? '<span class="marca-g" aria-hidden="true">G</span>' : '');
+        (/guin/i.test(l.material) ? '<span class="marca-g" aria-hidden="true">G</span>' : '') +
+        (lc && lc.length ? '<span class="casos-n" title="palmas en el listado">' + lc.length + '</span>' : '');
       c.appendChild(b);
     });
   }
@@ -244,6 +249,18 @@
         (etiqueta ? '<label class="campo"><span>' + etiqueta + '</span><input name="cantidad" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></label>' : '');
       f.querySelector('[name=tramo]').value = p.tramo || '';
       if (etiqueta && p.cantidad) f.querySelector('[name=cantidad]').value = p.cantidad;
+      const labor = $('l-labor').value;
+      if (LISTA[labor]) {
+        const lista = listaDe(labor, id);
+        const b = el('button', { type: 'button', class: 'detalle-casos', 'data-id': id });
+        if (!lista) { b.classList.add('vacio'); b.textContent = casos ? 'Sin listado para este lote' : 'Sin listado: actualice los casos con señal'; }
+        else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'pc' ? 'Sin palmas pendientes en el listado' : 'Sin palmas con PC en el sistema'; }
+        else {
+          const k = pendientesM(marcasDe(labor, id)).length;
+          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (k ? ' · ✓ ' + k + (LISTA[labor] === 'pc' ? ' con cirugía' : ' revisadas') : '');
+        }
+        f.appendChild(b);
+      }
       d.appendChild(f);
     });
   }
@@ -265,7 +282,11 @@
     fl.estado = b.dataset.e;
     [...$('l-estados').children].forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.e === fl.estado)));
   });
-  $('l-labor').addEventListener('change', pintarDetalle);
+  $('l-labor').addEventListener('change', () => { pintarLotes(); pintarDetalle(); pintarStrat(); });
+  $('l-detalle').addEventListener('click', (ev) => {
+    const b = ev.target.closest('.detalle-casos'); if (!b || b.classList.contains('vacio')) return;
+    abrirCasos($('l-labor').value, b.dataset.id);
+  });
 
   $('f-labor').addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -288,12 +309,23 @@
       }
     }
     const obs = $('l-obs').value.trim();
+    const marcadas = {};
     const nuevos = filas.map((f) => {
       const l = lotePorId(f.dataset.id);
       const cant = etiqueta ? Math.max(0, Math.round(Number(f.querySelector('[name=cantidad]').value))) : '';
+      // palmas marcadas en el listado (las agregadas a mano van en observaciones)
+      let palmas = '', obsLote = obs;
+      if (LISTA[labor] && marcas[claveM(labor, l.id)]) {
+        const mm = marcas[claveM(labor, l.id)];
+        const pend = pendientesM(mm);
+        marcadas[l.id] = pend;
+        palmas = pend.join(',');
+        const extra = pend.filter((k) => mm.m[k].x).map((k) => 'L' + k.replace('-', '-P'));
+        if (extra.length) obsLote = (obs ? obs + ' · ' : '') + (LISTA[labor] === 'pc' ? 'Cirugías fuera de la lista: ' : 'Palmas nuevas con PC: ') + extra.join(', ');
+      }
       return {
         uid: uid(), tipo: 'registro', fecha: fecha, labor: labor, lote: l.id, estado: fl.estado,
-        tramo: f.querySelector('[name=tramo]').value.trim(), cantidad: cant, observaciones: obs,
+        tramo: f.querySelector('[name=tramo]').value.trim(), cantidad: cant, observaciones: obsLote, palmas: palmas,
         _txt: labor + ', ' + proyectoCorto(l.proyecto) + ' lote ' + loteCorto(l.lote),
         _sub: fechaCorta(fecha) + ', ' + fl.estado + (etiqueta ? ', ' + cant + ' ' + etiqueta.toLowerCase() : ''),
         _creado: Date.now()
@@ -307,6 +339,8 @@
       const l = lotePorId(it.lote);
       const nom = 'Lote ' + loteCorto(l.lote) + ' (' + proyectoCorto(l.proyecto) + ')';
       if (etiqueta && it.cantidad > LIMITE_CANTIDAD) avisos.push(nom + ': ' + it.cantidad + ' ' + etiqueta.toLowerCase() + ' es mucho para un día. Revisa el número.');
+      const nm = (marcadas[it.lote] || []).length;
+      if (labor === 'Control PC' && nm && nm !== it.cantidad) avisos.push(nom + ': marcaste ' + nm + ' palmas con cirugía en el listado y escribiste ' + it.cantidad + ' cirugías.');
       if (labor === 'Control PC' && !/guin/i.test(l.material)) avisos.push(nom + ' es Híbrido. El control de PC se hace en Guineensis.');
       else if (labor === 'Control PC' && sesion.pcSiembraDesde && Number(l.siembra) >= sesion.pcSiembraDesde) avisos.push(nom + ' es siembra ' + l.siembra + '. Esos lotes aún no entran en control de PC.');
       if (it.estado === 'Terminado' && labor !== 'Control PC') {
@@ -314,13 +348,20 @@
         if (prev) avisos.push(nom + ' ya lo enviaste como Terminado el ' + fechaCorta(prev.fecha) + '.');
       }
       return '<b>' + esc(nom) + '</b><br>' + esc(it.estado) + (etiqueta ? ', ' + it.cantidad + ' ' + etiqueta.toLowerCase() : '') +
-        (it.tramo ? ', líneas ' + esc(it.tramo) : '');
+        (it.tramo ? ', líneas ' + esc(it.tramo) : '') +
+        (nm ? '<br>' + nm + (labor === 'Control PC' ? ' palmas con cirugía' : ' palmas revisadas') + ' en el listado' : '');
     });
     const okConf = await confirmar(labor + ', ' + fechaCorta(fecha), lineasConf, avisos);
     if (!okConf) return;
 
     cola = cola.concat(nuevos);
     if (!guardar(K.cola, cola)) return;
+    // las palmas enviadas quedan en gris en el listado
+    Object.keys(marcadas).forEach((id) => {
+      const mm = marcas[claveM(labor, id)];
+      marcadas[id].forEach((k) => { if (mm && mm.m[k]) mm.m[k].s = 1; });
+    });
+    guardar(K.marcas, marcas);
     ultimo = { labor: labor, proyecto: fl.proyecto };
     guardar(K.ultimo, ultimo);
 
@@ -332,6 +373,171 @@
     avisar(nuevos.length === 1 ? 'Labor guardada.' : nuevos.length + ' lotes guardados.');
     pintarEstado();
     enviar();
+  });
+
+  // ---------- Listado de casos por lote (línea - palma) ----------
+  // Control PC: palmas con PC del último censo sin cirugía en esta ronda. Censo: todas las palmas con PC en el sistema.
+  const LISTA = { 'Control PC': 'pc', 'Censo Enfermedades': 'sis' };
+  const DIAS_MARCAS = 15;
+  let casos = leer(K.casos, null);      // { hora, datos }
+  let marcas = leer(K.marcas, {});      // 'labor|lote' -> { censo, t0, m: { 'línea-palma': { s: 0 marcada | 1 enviada, x: 1 si se agregó a mano } } }
+  let abierto = null;                   // { labor, id }
+
+  async function cargarCasos() {
+    if (!navigator.onLine || !sesion || !urlPuente()) return false;
+    try {
+      const r = await pedir(urlPuente() + (urlPuente().includes('?') ? '&' : '?') + 'action=casos&pin=' + encodeURIComponent(sesion.pin), null, 90000);
+      if (!r || !r.ok) return false;
+      casos = { hora: Date.now(), datos: r };
+      guardar(K.casos, casos);
+      pintarLotes(); pintarDetalle(); pintarStrat();
+      if (abierto) pintarCasos();
+      return true;
+    } catch (e) { return false; }
+  }
+  function datosLote(id) { return casos && casos.datos && casos.datos.lotes ? casos.datos.lotes[id] || null : null; }
+  function listaDe(labor, id) {
+    const t = LISTA[labor]; if (!t || !casos) return null;
+    const d = datosLote(id);
+    return d ? d[t] : [];
+  }
+  function claveM(labor, id) { return labor + '|' + id; }
+  function marcasDe(labor, id) {
+    const k = claveM(labor, id), d = datosLote(id), censo = d ? d.censo : '';
+    let m = marcas[k];
+    // las marcas valen para una ronda: se borran si llega un censo nuevo o pasan 15 días
+    if (m && (m.censo !== censo || Date.now() - m.t0 > DIAS_MARCAS * 86400000)) { delete marcas[k]; m = null; guardar(K.marcas, marcas); }
+    return m || { censo: censo, t0: Date.now(), m: {} };
+  }
+  function pendientesM(mm) { return Object.keys(mm.m).filter((k) => mm.m[k].s === 0); }
+
+  function abrirCasos(labor, id) {
+    abierto = { labor: labor, id: id };
+    $('casos-ocultar').checked = false;
+    $('casos-nl').value = ''; $('casos-np').value = '';
+    pintarCasos();
+    $('casos').showModal();
+    $('casos-cuerpo').scrollTop = 0;
+  }
+
+  function pintarCasos() {
+    const labor = abierto.labor, id = abierto.id, esPC = LISTA[labor] === 'pc';
+    const l = lotePorId(id), d = datosLote(id) || { censo: '', pc: [], sis: [] };
+    const mm = marcasDe(labor, id);
+    const lista = (esPC ? d.pc : d.sis) || [];
+    const ya = {};
+    lista.forEach((x) => { ya[x[0] + '-' + x[1]] = 1; });
+    const extras = Object.keys(mm.m).filter((k) => mm.m[k].x && !ya[k]).map((k) => k.split('-').map(Number).concat([-1]));
+    const todas = lista.concat(extras);
+    const porLinea = {};
+    todas.forEach((x) => { (porLinea[x[0]] = porLinea[x[0]] || []).push(x); });
+    const hechas = todas.filter((x) => mm.m[x[0] + '-' + x[1]]).length;
+
+    $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : 'Censo');
+    $('casos-sub').textContent = esPC ? 'Censo del ' + (d.censo || '—') + ' · palmas con PC sin cirugía en esta ronda'
+                                      : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
+    $('casos-cuenta').textContent = hechas + ' de ' + todas.length + (esPC ? ' palmas con cirugía' : ' palmas revisadas');
+    $('casos-ley').textContent = esPC ? '★ grave: atender primero' : '★ grave · borde punteado: cirugía sin censo';
+    $('casos-nueva-txt').textContent = esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
+                                            : 'Palma nueva con PC: escriba línea y palma. Se reporta en observaciones.';
+    const ocultar = $('casos-ocultar').checked;
+    const c = $('casos-cuerpo');
+    c.innerHTML = '';
+    const lineas = Object.keys(porLinea).map(Number).sort((a, b) => a - b);
+    let pintadas = 0;
+    lineas.forEach((ln) => {
+      const ps = porLinea[ln].sort((a, b) => a[1] - b[1]);
+      const visibles = ps.filter((x) => !(ocultar && mm.m[x[0] + '-' + x[1]]));
+      if (!visibles.length) return;
+      const fila = el('div', { class: 'casos-linea' });
+      fila.appendChild(el('b', {}, 'Línea ' + ln + '<small>' + ps.length + (ps.length === 1 ? ' palma' : ' palmas') + '</small>'));
+      const cont = el('div', { class: 'casos-palmas' });
+      visibles.forEach((x) => {
+        const k = x[0] + '-' + x[1], st = mm.m[k];
+        let cls = 'palma';
+        if ((esPC && x[2] === 1) || (!esPC && x[2] === 2)) cls += ' grave';
+        if (!esPC && x[2] === 0) cls += ' sin-censo';
+        if (x[2] === -1) cls += ' extra';
+        if (st) cls += st.s === 1 ? ' enviada' : ' hecha';
+        cont.appendChild(el('button', { type: 'button', class: cls, 'data-k': k, 'aria-label': 'Línea ' + x[0] + ' palma ' + x[1], text: String(x[1]) }));
+        pintadas++;
+      });
+      fila.appendChild(cont);
+      c.appendChild(fila);
+    });
+    if (!pintadas) c.appendChild(el('p', { class: 'casos-vacio', text: todas.length ? 'Todas las palmas están marcadas. 👏' : 'No hay palmas en el listado de este lote.' }));
+  }
+
+  function guardarMarca(mm) {
+    marcas[claveM(abierto.labor, abierto.id)] = mm;
+    guardar(K.marcas, marcas);
+  }
+  $('casos-cuerpo').addEventListener('click', (ev) => {
+    const b = ev.target.closest('.palma'); if (!b) return;
+    const mm = marcasDe(abierto.labor, abierto.id), k = b.dataset.k;
+    if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
+    if (mm.m[k]) { if (mm.m[k].x) delete mm.m[k]; else delete mm.m[k]; }
+    else mm.m[k] = { s: 0 };
+    guardarMarca(mm);
+    pintarCasos();
+  });
+  $('casos-ocultar').addEventListener('change', pintarCasos);
+  $('casos-agregar').addEventListener('click', () => {
+    const ln = Math.round(Number($('casos-nl').value)), pm = Math.round(Number($('casos-np').value));
+    if (!(ln >= 1 && ln <= 300) || !(pm >= 1 && pm <= 80)) return avisar('Revisa la línea (1 a 300) y la palma (1 a 80).');
+    const mm = marcasDe(abierto.labor, abierto.id), k = ln + '-' + pm;
+    if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
+    const d = datosLote(abierto.id) || {};
+    const lista = (LISTA[abierto.labor] === 'pc' ? d.pc : d.sis) || [];
+    const enLista = lista.some((x) => x[0] === ln && x[1] === pm);
+    mm.m[k] = enLista ? { s: 0 } : { s: 0, x: 1 };
+    guardarMarca(mm);
+    $('casos-nl').value = ''; $('casos-np').value = '';
+    avisar(enLista ? 'Esa palma ya estaba en la lista: quedó marcada.' : 'Palma agregada: línea ' + ln + ', palma ' + pm + '.');
+    pintarCasos();
+  });
+  $('casos-listo').addEventListener('click', () => {
+    const labor = abierto.labor, id = abierto.id;
+    const pend = pendientesM(marcasDe(labor, id));
+    $('casos').close();
+    abierto = null;
+    pintarDetalle();
+    // llena cirugías y líneas con lo marcado (se puede corregir a mano)
+    const f = $('l-detalle').querySelector('.detalle-fila[data-id="' + CSS.escape(id) + '"]');
+    if (f && pend.length) {
+      const ls = pend.map((k) => Number(k.split('-')[0]));
+      const tr = f.querySelector('[name=tramo]');
+      if (!tr.value) tr.value = Math.min.apply(null, ls) + ' a ' + Math.max.apply(null, ls);
+      const ca = f.querySelector('[name=cantidad]');
+      if (ca && LISTA[labor] === 'pc') ca.value = pend.length;
+    }
+  });
+  $('casos').addEventListener('cancel', () => { abierto = null; pintarDetalle(); });
+
+  // Strategus: lotes con presencia por controlar, por prioridad (toque para elegir el lote)
+  function pintarStrat() {
+    const box = $('l-strat');
+    const lista = casos && casos.datos && casos.datos.strategus ? casos.datos.strategus : [];
+    box.hidden = !sesion || $('l-labor').value !== 'Control Strategus' || !lista.length;
+    if (box.hidden) return;
+    $('l-strat-sub').textContent = 'Ordenados por palmas con presencia. Toque uno para elegirlo.';
+    const c = $('l-strat-lista');
+    c.innerHTML = '';
+    lista.forEach((x, i) => {
+      const l = lotePorId(x.id); if (!l) return;
+      const b = el('button', { type: 'button', 'data-id': x.id });
+      b.innerHTML = '<span class="n">' + (i + 1) + '</span><span><b>' + esc(proyectoCorto(l.proyecto)) + ' · Lote ' + esc(loteCorto(l.lote)) + '</b>' +
+        '<small>' + x.palmas + (x.palmas === 1 ? ' palma' : ' palmas') + ' con presencia · detectado ' + esc(x.fecha) + ' (' + x.dias + ' días)' + (x.avance ? ' · en avance' : '') + '</small></span>';
+      c.appendChild(b);
+    });
+  }
+  $('l-strat-lista').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    const l = lotePorId(b.dataset.id); if (!l) return;
+    fl.proyecto = l.proyecto;
+    if (!fl.lotes.includes(l.id)) fl.lotes = (fl.lotes.length && lotePorId(fl.lotes[0]).proyecto === l.proyecto ? fl.lotes : []).concat(l.id);
+    marcarProyecto(); pintarDetalle();
+    $('l-detalle').scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
   // ---------- Formulario de novedad ----------
@@ -511,13 +717,14 @@
 
   $('btn-menu').addEventListener('click', () => {
     const f = new Date(sesion.actualizado);
-    $('menu-info').textContent = sesion.lotes.length + ' lotes, actualizados el ' + f.toLocaleDateString('es-CO') + ' a las ' + f.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) + '.';
+    $('menu-info').textContent = sesion.lotes.length + ' lotes, actualizados el ' + f.toLocaleDateString('es-CO') + ' a las ' + f.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) + '.' +
+      (casos ? ' Listado de casos: censo hasta ' + (casos.datos.censoHasta || '—') + ', descargado ' + new Date(casos.hora).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + '.' : ' Sin listado de casos todavía.');
     $('menu').showModal();
   });
   $('btn-actualizar').addEventListener('click', async () => {
     $('menu').close();
     const r = await actualizarLotes();
-    avisar(r === true ? 'Lotes actualizados.' : r);
+    avisar(r === true ? 'Lotes y casos actualizados.' : r);
   });
   $('btn-salir').addEventListener('click', () => {
     if (cola.length) {
@@ -544,6 +751,7 @@
       fl.lotes = fl.lotes.filter((id) => lotePorId(id));
       if (fl.proyecto && !proyectos().includes(fl.proyecto)) fl.proyecto = '';
       pintarLabor(); pintarDetalle(); pintarNovedad();
+      await cargarCasos();
       return true;
     } catch (e) {
       return 'No hubo respuesta. Intenta de nuevo.';
@@ -584,13 +792,15 @@
     pintarLabor();
     pintarNovedad();
     pintarEstado();
+    pintarStrat();
     irA('labor');
     enviar();
+    if (!casos || Date.now() - casos.hora > 3 * 3600 * 1000) cargarCasos();
     // lotes al día una vez por día
     if (Date.now() - (sesion.actualizado || 0) > 12 * 3600 * 1000) actualizarLotes();
   }
 
-  window.addEventListener('online', () => { ultimoFallo = ''; enviar(); });
+  window.addEventListener('online', () => { ultimoFallo = ''; enviar(); if (sesion && (!casos || Date.now() - casos.hora > 3 * 3600 * 1000)) cargarCasos(); });
   window.addEventListener('offline', () => { if (cola.length) { ultimoFallo = 'sin-senal'; pintarEstado(); } });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && sesion) enviar(); });
   setInterval(() => { if (sesion && cola.length) enviar(); }, 60000);

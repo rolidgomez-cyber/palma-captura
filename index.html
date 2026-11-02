@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=1.2">
+<link rel="stylesheet" href="css/app.css?v=1.4">
 </head>
 <body>
 
@@ -74,6 +74,12 @@
           <select id="l-labor"></select>
         </label>
       </div>
+
+      <section class="strat-prioridad" id="l-strat" hidden>
+        <h3>Strategus: lotes por controlar</h3>
+        <p class="strat-sub" id="l-strat-sub"></p>
+        <div class="strat-lista" id="l-strat-lista"></div>
+      </section>
 
       <fieldset class="campo">
         <legend>Proyecto</legend>
@@ -162,7 +168,7 @@
 <dialog id="menu" class="menu">
   <form method="dialog">
     <p class="menu-info" id="menu-info"></p>
-    <button type="button" class="btn-sec" id="btn-actualizar">Actualizar lotes</button>
+    <button type="button" class="btn-sec" id="btn-actualizar">Actualizar lotes y casos</button>
     <button type="button" class="btn-sec" id="btn-salir">Salir</button>
     <button value="cerrar" class="btn-texto">Cerrar</button>
   </form>
@@ -180,9 +186,32 @@
   </form>
 </dialog>
 
+<!-- Listado de casos del lote -->
+<dialog id="casos" class="casos">
+  <div class="casos-cab">
+    <button type="button" class="casos-cerrar" id="casos-listo">Listo</button>
+    <h2 id="casos-titulo">—</h2>
+    <p id="casos-sub"></p>
+    <p class="casos-cuenta" id="casos-cuenta"></p>
+    <div class="casos-herr">
+      <label class="casos-ocultar"><input type="checkbox" id="casos-ocultar"> Ocultar las marcadas</label>
+      <span class="casos-ley" id="casos-ley"></span>
+    </div>
+  </div>
+  <div class="casos-cuerpo" id="casos-cuerpo"></div>
+  <div class="casos-pie">
+    <div class="casos-nueva">
+      <input type="number" inputmode="numeric" id="casos-nl" placeholder="Línea" min="1">
+      <input type="number" inputmode="numeric" id="casos-np" placeholder="Palma" min="1">
+      <button type="button" class="btn-sec" id="casos-agregar">+ Agregar</button>
+    </div>
+    <p class="casos-nueva-txt" id="casos-nueva-txt"></p>
+  </div>
+</dialog>
+
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1.2"></script>
-<script src="js/app.js?v=1.2"></script>
+<script src="js/app.js?v=1.4"></script>
 </body>
 </html>
