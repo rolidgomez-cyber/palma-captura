@@ -333,3 +333,5 @@ main { padding: 14px 14px calc(96px + env(safe-area-inset-bottom)); max-width: 5
 .casos-nueva { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
 .casos-nueva input { min-height: 48px; padding: 8px; border-radius: var(--radio-s); border: 2px solid var(--linea); width: 100%; }
 .casos-nueva-txt { margin: 4px 0 0; font-size: 13px; color: var(--tinta-2); }
+.palma.error { border-color: var(--pendiente); border-style: dashed; color: var(--pendiente); background: var(--pendiente-fondo); }
+.palma.error::after { content: "✎"; font-size: 12px; margin-left: 2px; }

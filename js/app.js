@@ -1,5 +1,6 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
+ * v1.5 (02/11/2026): Strategus por línea - palma; palmas con posible error de escritura en el listado de censo.
  * v1.4 (02/11/2026): listado de casos por lote (línea - palma) para Control PC, Censo y Strategus.
  * Habla con el puente de Apps Script v2.9:
  *   GET  ?action=captura&pin=XXXXXX
@@ -254,10 +255,10 @@
         const lista = listaDe(labor, id);
         const b = el('button', { type: 'button', class: 'detalle-casos', 'data-id': id });
         if (!lista) { b.classList.add('vacio'); b.textContent = casos ? 'Sin listado para este lote' : 'Sin listado: actualice los casos con señal'; }
-        else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'pc' ? 'Sin palmas pendientes en el listado' : 'Sin palmas con PC en el sistema'; }
+        else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'sis' ? 'Sin palmas con PC en el sistema' : 'Sin palmas pendientes en el listado'; }
         else {
           const k = pendientesM(marcasDe(labor, id)).length;
-          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (k ? ' · ✓ ' + k + (LISTA[labor] === 'pc' ? ' con cirugía' : ' revisadas') : '');
+          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (k ? ' · ✓ ' + k + ' ' + MARCA[LISTA[labor]] : '');
         }
         f.appendChild(b);
       }
@@ -321,7 +322,7 @@
         marcadas[l.id] = pend;
         palmas = pend.join(',');
         const extra = pend.filter((k) => mm.m[k].x).map((k) => 'L' + k.replace('-', '-P'));
-        if (extra.length) obsLote = (obs ? obs + ' · ' : '') + (LISTA[labor] === 'pc' ? 'Cirugías fuera de la lista: ' : 'Palmas nuevas con PC: ') + extra.join(', ');
+        if (extra.length) obsLote = (obs ? obs + ' · ' : '') + ({ pc: 'Cirugías fuera de la lista: ', sis: 'Palmas nuevas con PC: ', st: 'Strategus fuera de la lista: ' })[LISTA[labor]] + extra.join(', ');
       }
       return {
         uid: uid(), tipo: 'registro', fecha: fecha, labor: labor, lote: l.id, estado: fl.estado,
@@ -349,7 +350,7 @@
       }
       return '<b>' + esc(nom) + '</b><br>' + esc(it.estado) + (etiqueta ? ', ' + it.cantidad + ' ' + etiqueta.toLowerCase() : '') +
         (it.tramo ? ', líneas ' + esc(it.tramo) : '') +
-        (nm ? '<br>' + nm + (labor === 'Control PC' ? ' palmas con cirugía' : ' palmas revisadas') + ' en el listado' : '');
+        (nm ? '<br>' + nm + ' palmas ' + MARCA[LISTA[labor]] + ' en el listado' : '');
     });
     const okConf = await confirmar(labor + ', ' + fechaCorta(fecha), lineasConf, avisos);
     if (!okConf) return;
@@ -377,7 +378,8 @@
 
   // ---------- Listado de casos por lote (línea - palma) ----------
   // Control PC: palmas con PC del último censo sin cirugía en esta ronda. Censo: todas las palmas con PC en el sistema.
-  const LISTA = { 'Control PC': 'pc', 'Censo Enfermedades': 'sis' };
+  const LISTA = { 'Control PC': 'pc', 'Censo Enfermedades': 'sis', 'Control Strategus': 'st' };
+  const MARCA = { pc: 'con cirugía', sis: 'revisadas', st: 'controladas' };
   const DIAS_MARCAS = 15;
   let casos = leer(K.casos, null);      // { hora, datos }
   let marcas = leer(K.marcas, {});      // 'labor|lote' -> { censo, t0, m: { 'línea-palma': { s: 0 marcada | 1 enviada, x: 1 si se agregó a mano } } }
@@ -399,7 +401,7 @@
   function listaDe(labor, id) {
     const t = LISTA[labor]; if (!t || !casos) return null;
     const d = datosLote(id);
-    return d ? d[t] : [];
+    return d ? (d[t] || []) : [];
   }
   function claveM(labor, id) { return labor + '|' + id; }
   function marcasDe(labor, id) {
@@ -421,10 +423,10 @@
   }
 
   function pintarCasos() {
-    const labor = abierto.labor, id = abierto.id, esPC = LISTA[labor] === 'pc';
-    const l = lotePorId(id), d = datosLote(id) || { censo: '', pc: [], sis: [] };
+    const labor = abierto.labor, id = abierto.id, tipo = LISTA[labor], esPC = tipo === 'pc', esST = tipo === 'st';
+    const l = lotePorId(id), d = datosLote(id) || { censo: '', pc: [], sis: [], st: [] };
     const mm = marcasDe(labor, id);
-    const lista = (esPC ? d.pc : d.sis) || [];
+    const lista = d[tipo] || [];
     const ya = {};
     lista.forEach((x) => { ya[x[0] + '-' + x[1]] = 1; });
     const extras = Object.keys(mm.m).filter((k) => mm.m[k].x && !ya[k]).map((k) => k.split('-').map(Number).concat([-1]));
@@ -433,12 +435,15 @@
     todas.forEach((x) => { (porLinea[x[0]] = porLinea[x[0]] || []).push(x); });
     const hechas = todas.filter((x) => mm.m[x[0] + '-' + x[1]]).length;
 
-    $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : 'Censo');
+    $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : esST ? 'Control Strategus' : 'Censo');
     $('casos-sub').textContent = esPC ? 'Censo del ' + (d.censo || '—') + ' · palmas con PC sin cirugía en esta ronda'
+                               : esST ? 'Censo de plagas · palmas con Strategus sin control'
                                       : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
-    $('casos-cuenta').textContent = hechas + ' de ' + todas.length + (esPC ? ' palmas con cirugía' : ' palmas revisadas');
-    $('casos-ley').textContent = esPC ? '★ grave: atender primero' : '★ grave · borde punteado: cirugía sin censo';
+    $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + MARCA[tipo];
+    $('casos-ley').textContent = esPC ? '★ grave: atender primero' : esST ? '★ 3 o más adultos: atender primero'
+                                      : '★ grave · punteado: cirugía sin censo · ✎ posible error de escritura: dar de alta';
     $('casos-nueva-txt').textContent = esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
+                                     : esST ? 'Palma con Strategus que no está en la lista: escriba línea y palma. Se reporta en observaciones.'
                                             : 'Palma nueva con PC: escriba línea y palma. Se reporta en observaciones.';
     const ocultar = $('casos-ocultar').checked;
     const c = $('casos-cuerpo');
@@ -455,8 +460,9 @@
       visibles.forEach((x) => {
         const k = x[0] + '-' + x[1], st = mm.m[k];
         let cls = 'palma';
-        if ((esPC && x[2] === 1) || (!esPC && x[2] === 2)) cls += ' grave';
-        if (!esPC && x[2] === 0) cls += ' sin-censo';
+        if ((esPC && x[2] === 1) || (tipo === 'sis' && x[2] === 2) || (esST && x[2] >= 3)) cls += ' grave';
+        if (tipo === 'sis' && x[2] === 0) cls += ' sin-censo';
+        if (tipo === 'sis' && x[2] === 3) cls += ' error';
         if (x[2] === -1) cls += ' extra';
         if (st) cls += st.s === 1 ? ' enviada' : ' hecha';
         cont.appendChild(el('button', { type: 'button', class: cls, 'data-k': k, 'aria-label': 'Línea ' + x[0] + ' palma ' + x[1], text: String(x[1]) }));
@@ -488,7 +494,7 @@
     const mm = marcasDe(abierto.labor, abierto.id), k = ln + '-' + pm;
     if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
     const d = datosLote(abierto.id) || {};
-    const lista = (LISTA[abierto.labor] === 'pc' ? d.pc : d.sis) || [];
+    const lista = d[LISTA[abierto.labor]] || [];
     const enLista = lista.some((x) => x[0] === ln && x[1] === pm);
     mm.m[k] = enLista ? { s: 0 } : { s: 0, x: 1 };
     guardarMarca(mm);
@@ -527,7 +533,7 @@
       const l = lotePorId(x.id); if (!l) return;
       const b = el('button', { type: 'button', 'data-id': x.id });
       b.innerHTML = '<span class="n">' + (i + 1) + '</span><span><b>' + esc(proyectoCorto(l.proyecto)) + ' · Lote ' + esc(loteCorto(l.lote)) + '</b>' +
-        '<small>' + x.palmas + (x.palmas === 1 ? ' palma' : ' palmas') + ' con presencia · detectado ' + esc(x.fecha) + ' (' + x.dias + ' días)' + (x.avance ? ' · en avance' : '') + '</small></span>';
+        '<small>' + x.palmas + (x.palmas === 1 ? ' palma' : ' palmas') + ' con presencia' + (x.individuos ? ' · ' + x.individuos + ' adultos' : '') + ' · desde ' + esc(x.fecha) + ' (' + x.dias + ' días)' + (x.avance ? ' · en avance' : '') + '</small></span>';
       c.appendChild(b);
     });
   }
