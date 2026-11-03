@@ -1,6 +1,6 @@
 /* Guarda el formulario en el teléfono para que abra sin señal. */
-const CACHE = 'captura-v1.5';
-const ARCHIVOS = ['./', './index.html', './css/app.css?v=1.5', './config.js?v=1.2', './js/app.js?v=1.5',
+const CACHE = 'captura-v1.6';
+const ARCHIVOS = ['./', './index.html', './css/app.css?v=1.6', './config.js?v=1.2', './js/app.js?v=1.6',
   './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

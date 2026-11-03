@@ -255,10 +255,11 @@
         const lista = listaDe(labor, id);
         const b = el('button', { type: 'button', class: 'detalle-casos', 'data-id': id });
         if (!lista) { b.classList.add('vacio'); b.textContent = casos ? 'Sin listado para este lote' : 'Sin listado: actualice los casos con señal'; }
-        else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'sis' ? 'Sin palmas con PC en el sistema' : 'Sin palmas pendientes en el listado'; }
+        else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'st' ? 'Sin palmas pendientes en el listado' : 'Sin palmas con PC en el sistema'; }
         else {
           const k = pendientesM(marcasDe(labor, id)).length;
-          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (k ? ' · ✓ ' + k + ' ' + MARCA[LISTA[labor]] : '');
+          const sinCir = LISTA[labor] === 'pc' ? lista.filter((x) => x[2] > 0).length : -1;
+          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (sinCir >= 0 ? ' · ' + sinCir + ' sin cirugía' : '') + (k ? ' · ✓ ' + k + ' ' + MARCA[LISTA[labor]] : '');
         }
         f.appendChild(b);
       }
@@ -401,7 +402,13 @@
   function listaDe(labor, id) {
     const t = LISTA[labor]; if (!t || !casos) return null;
     const d = datosLote(id);
-    return d ? (d[t] || []) : [];
+    return d ? filasDe(d, t) : [];
+  }
+  // Control PC: todas las palmas del sistema (pcs). Si el servidor es viejo, solo las pendientes (pc)
+  function filasDe(d, t) {
+    if (!d) return [];
+    if (t === 'pc') return d.pcs || (d.pc || []).map((x) => [x[0], x[1], x[2] ? 2 : 1]);
+    return d[t] || [];
   }
   function claveM(labor, id) { return labor + '|' + id; }
   function marcasDe(labor, id) {
@@ -426,7 +433,7 @@
     const labor = abierto.labor, id = abierto.id, tipo = LISTA[labor], esPC = tipo === 'pc', esST = tipo === 'st';
     const l = lotePorId(id), d = datosLote(id) || { censo: '', pc: [], sis: [], st: [] };
     const mm = marcasDe(labor, id);
-    const lista = d[tipo] || [];
+    const lista = filasDe(d, tipo);
     const ya = {};
     lista.forEach((x) => { ya[x[0] + '-' + x[1]] = 1; });
     const extras = Object.keys(mm.m).filter((k) => mm.m[k].x && !ya[k]).map((k) => k.split('-').map(Number).concat([-1]));
@@ -436,11 +443,11 @@
     const hechas = todas.filter((x) => mm.m[x[0] + '-' + x[1]]).length;
 
     $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : esST ? 'Control Strategus' : 'Censo');
-    $('casos-sub').textContent = esPC ? 'Censo del ' + (d.censo || '—') + ' · palmas con PC sin cirugía en esta ronda'
+    $('casos-sub').textContent = esPC ? 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—')
                                : esST ? 'Censo de plagas · palmas con Strategus sin control'
                                       : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
     $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + MARCA[tipo];
-    $('casos-ley').textContent = esPC ? '★ grave: atender primero' : esST ? '★ 3 o más adultos: atender primero'
+    $('casos-ley').textContent = esPC ? '★ grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero'
                                       : '★ grave · punteado: cirugía sin censo · ✎ posible error de escritura: dar de alta';
     $('casos-nueva-txt').textContent = esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
                                      : esST ? 'Palma con Strategus que no está en la lista: escriba línea y palma. Se reporta en observaciones.'
@@ -460,7 +467,8 @@
       visibles.forEach((x) => {
         const k = x[0] + '-' + x[1], st = mm.m[k];
         let cls = 'palma';
-        if ((esPC && x[2] === 1) || (tipo === 'sis' && x[2] === 2) || (esST && x[2] >= 3)) cls += ' grave';
+        if ((esPC && x[2] === 2) || (tipo === 'sis' && x[2] === 2) || (esST && x[2] >= 3)) cls += ' grave';
+        if (esPC && x[2] === 0) cls += ' en-control';
         if (tipo === 'sis' && x[2] === 0) cls += ' sin-censo';
         if (tipo === 'sis' && x[2] === 3) cls += ' error';
         if (x[2] === -1) cls += ' extra';
@@ -494,7 +502,7 @@
     const mm = marcasDe(abierto.labor, abierto.id), k = ln + '-' + pm;
     if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
     const d = datosLote(abierto.id) || {};
-    const lista = d[LISTA[abierto.labor]] || [];
+    const lista = filasDe(d, LISTA[abierto.labor]);
     const enLista = lista.some((x) => x[0] === ln && x[1] === pm);
     mm.m[k] = enLista ? { s: 0 } : { s: 0, x: 1 };
     guardarMarca(mm);

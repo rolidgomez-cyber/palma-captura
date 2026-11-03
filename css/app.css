@@ -323,6 +323,7 @@ main { padding: 14px 14px calc(96px + env(safe-area-inset-bottom)); max-width: 5
 .palma.grave { border-color: var(--error); color: var(--error); }
 .palma.grave::after { content: "★"; font-size: 12px; margin-left: 2px; }
 .palma.sin-censo { border-style: dashed; color: var(--tinta-2); }
+.palma.en-control { border-color: #B8C0BA; color: var(--tinta-2); background: #F1F3F1; }
 .palma.extra { border-color: var(--palma); border-style: dotted; }
 .palma.hecha { background: var(--ok); border-color: var(--ok); color: #fff; }
 .palma.hecha::before { content: "✓ "; font-size: 14px; }
