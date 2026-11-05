@@ -258,8 +258,9 @@
         else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'st' ? 'Sin palmas pendientes en el listado' : 'Sin palmas con PC en el sistema'; }
         else {
           const k = pendientesM(marcasDe(labor, id)).length;
-          const sinCir = LISTA[labor] === 'pc' ? lista.filter((x) => x[2] > 0).length : -1;
-          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (sinCir >= 0 ? ' · ' + sinCir + ' sin cirugía' : '') + (k ? ' · ✓ ' + k + ' ' + MARCA[LISTA[labor]] : '');
+          const tl = LISTA[labor];
+          const sinCir = tl === 'pc' ? lista.filter((x) => x[2] > 0).length : tl === 'st' ? lista.filter((x) => x[3] !== 0).length : -1;
+          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (sinCir >= 0 ? ' · ' + sinCir + (tl === 'st' ? ' sin control' : ' sin cirugía') : '') + (k ? ' · ✓ ' + k + ' ' + MARCA[LISTA[labor]] : '');
         }
         f.appendChild(b);
       }
@@ -408,6 +409,7 @@
   function filasDe(d, t) {
     if (!d) return [];
     if (t === 'pc') return d.pcs || (d.pc || []).map((x) => [x[0], x[1], x[2] ? 2 : 1]);
+    if (t === 'st') return d.sts || (d.st || []).map((x) => [x[0], x[1], x[2], 1]);
     return d[t] || [];
   }
   function claveM(labor, id) { return labor + '|' + id; }
@@ -444,10 +446,10 @@
 
     $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : esST ? 'Control Strategus' : 'Censo');
     $('casos-sub').textContent = esPC ? 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—')
-                               : esST ? 'Censo de plagas · palmas con Strategus sin control'
+                               : esST ? 'Censo de plagas · todas las palmas con Strategus del lote'
                                       : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
     $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + MARCA[tipo];
-    $('casos-ley').textContent = esPC ? '★ grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero'
+    $('casos-ley').textContent = esPC ? '★ grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero · borde oscuro: sin control · gris: ya controlada, revisar'
                                       : '★ grave · punteado: cirugía sin censo · ✎ posible error de escritura: dar de alta';
     $('casos-nueva-txt').textContent = esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
                                      : esST ? 'Palma con Strategus que no está en la lista: escriba línea y palma. Se reporta en observaciones.'
@@ -467,8 +469,8 @@
       visibles.forEach((x) => {
         const k = x[0] + '-' + x[1], st = mm.m[k];
         let cls = 'palma';
-        if ((esPC && x[2] === 2) || (tipo === 'sis' && x[2] === 2) || (esST && x[2] >= 3)) cls += ' grave';
-        if (esPC && x[2] === 0) cls += ' en-control';
+        if ((esPC && x[2] === 2) || (tipo === 'sis' && x[2] === 2) || (esST && x[2] >= 3 && x[3] !== 0)) cls += ' grave';
+        if ((esPC && x[2] === 0) || (esST && x[3] === 0)) cls += ' en-control';
         if (tipo === 'sis' && x[2] === 0) cls += ' sin-censo';
         if (tipo === 'sis' && x[2] === 3) cls += ' error';
         if (x[2] === -1) cls += ' extra';
@@ -531,17 +533,20 @@
   // Strategus: lotes con presencia por controlar, por prioridad (toque para elegir el lote)
   function pintarStrat() {
     const box = $('l-strat');
-    const lista = casos && casos.datos && casos.datos.strategus ? casos.datos.strategus : [];
+    const dd = casos && casos.datos ? casos.datos : {};
+    const lista = dd.stLotes || (dd.strategus || []).map((x) => ({ id: x.id, total: x.palmas, pend: x.palmas, individuos: x.individuos, fecha: x.fecha, dias: x.dias, avance: x.avance }));
     box.hidden = !sesion || $('l-labor').value !== 'Control Strategus' || !lista.length;
     if (box.hidden) return;
-    $('l-strat-sub').textContent = 'Ordenados por palmas con presencia. Toque uno para elegirlo.';
+    $('l-strat-sub').textContent = 'Primero los que tienen palmas sin control. Toque uno para elegirlo.';
     const c = $('l-strat-lista');
     c.innerHTML = '';
     lista.forEach((x, i) => {
       const l = lotePorId(x.id); if (!l) return;
       const b = el('button', { type: 'button', 'data-id': x.id });
       b.innerHTML = '<span class="n">' + (i + 1) + '</span><span><b>' + esc(proyectoCorto(l.proyecto)) + ' · Lote ' + esc(loteCorto(l.lote)) + '</b>' +
-        '<small>' + x.palmas + (x.palmas === 1 ? ' palma' : ' palmas') + ' con presencia' + (x.individuos ? ' · ' + x.individuos + ' adultos' : '') + ' · desde ' + esc(x.fecha) + ' (' + x.dias + ' días)' + (x.avance ? ' · en avance' : '') + '</small></span>';
+        '<small>' + (x.pend ? x.pend + ' sin control de ' + x.total + (x.total === 1 ? ' palma' : ' palmas') + (x.individuos ? ' · ' + x.individuos + ' adultos' : '') + ' · desde ' + esc(x.fecha) + ' (' + x.dias + ' días)' + (x.avance ? ' · en avance' : '')
+                         : 'Ya controlado · ' + x.total + (x.total === 1 ? ' palma' : ' palmas') + ' para revisar') + '</small></span>';
+      if (!x.pend) b.classList.add('st-hecho');
       c.appendChild(b);
     });
   }

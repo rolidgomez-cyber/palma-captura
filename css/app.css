@@ -336,3 +336,6 @@ main { padding: 14px 14px calc(96px + env(safe-area-inset-bottom)); max-width: 5
 .casos-nueva-txt { margin: 4px 0 0; font-size: 13px; color: var(--tinta-2); }
 .palma.error { border-color: var(--pendiente); border-style: dashed; color: var(--pendiente); background: var(--pendiente-fondo); }
 .palma.error::after { content: "✎"; font-size: 12px; margin-left: 2px; }
+
+#l-strat-lista button.st-hecho { opacity: .7; }
+#l-strat-lista button.st-hecho .n { background: #B8C0BA; }
