@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=1.7">
+<link rel="stylesheet" href="css/app.css?v=1.8">
 </head>
 <body>
 
@@ -155,12 +155,39 @@
       <ul class="lista" id="lista-enviados"></ul>
       <p class="nota">Lo enviado llega al coordinador, que lo revisa antes de pasarlo a la hoja. Para corregir algo ya enviado, avísale.</p>
     </section>
+
+    <!-- ---------- EQUIPO (solo coordinador) ---------- -->
+    <section class="panel" data-panel="equipo" hidden>
+      <div class="fila-2">
+        <label class="campo">
+          <span>Día</span>
+          <input type="date" id="eq-fecha">
+        </label>
+        <div class="campo eq-acc"><span>&nbsp;</span><button type="button" class="btn-sec" id="eq-cargar">Actualizar</button></div>
+      </div>
+      <p class="eq-resumen" id="eq-resumen"></p>
+      <div id="eq-lista" class="eq-lista"></div>
+
+      <h2 class="envios-titulo">Buscar una palma</h2>
+      <div class="fila-2">
+        <label class="campo"><span>Proyecto</span><select id="eq-proy"></select></label>
+        <label class="campo"><span>Lote</span><select id="eq-lote"></select></label>
+      </div>
+      <div class="fila-2">
+        <label class="campo"><span>Línea</span><input type="number" id="eq-l" inputmode="numeric" min="1"></label>
+        <label class="campo"><span>Palma</span><input type="number" id="eq-p" inputmode="numeric" min="1"></label>
+      </div>
+      <button type="button" class="btn-sec" id="eq-buscar">Buscar palma</button>
+      <div id="eq-palma" class="eq-palma" hidden></div>
+      <p class="nota">Para ver el listado completo de un lote, vaya a la pestaña Labor, elija la labor y el lote, y toque Ver listado. Es lo mismo que ve el líder.</p>
+    </section>
   </main>
 
   <nav class="pestanas" role="tablist">
     <button type="button" role="tab" data-ir="labor" aria-selected="true">Labor</button>
     <button type="button" role="tab" data-ir="novedad" aria-selected="false">Novedad</button>
     <button type="button" role="tab" data-ir="envios" aria-selected="false">Envíos <span class="pestana-num" id="pestana-num" hidden>0</span></button>
+    <button type="button" role="tab" data-ir="equipo" aria-selected="false" id="tab-equipo" hidden>Equipo</button>
   </nav>
 </section>
 
@@ -212,6 +239,6 @@
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1.2"></script>
-<script src="js/app.js?v=1.7"></script>
+<script src="js/app.js?v=1.8"></script>
 </body>
 </html>

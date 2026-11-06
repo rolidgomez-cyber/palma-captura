@@ -339,3 +339,26 @@ main { padding: 14px 14px calc(96px + env(safe-area-inset-bottom)); max-width: 5
 
 #l-strat-lista button.st-hecho { opacity: .7; }
 #l-strat-lista button.st-hecho .n { background: #B8C0BA; }
+
+/* Pestaña Equipo (coordinador) */
+.pestanas.cuatro { grid-template-columns: repeat(4, 1fr); }
+.eq-acc .btn-sec { width: 100%; }
+.eq-resumen { margin: 0; font-weight: 700; color: var(--tinta-2); }
+.eq-lista { display: flex; flex-direction: column; gap: 10px; }
+.eq-card { background: var(--papel); border: 2px solid var(--linea); border-radius: var(--radio-m); padding: 10px 12px; }
+.eq-card.eq-vacio { opacity: .65; }
+.eq-cab { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.eq-cab b { font-size: 16px; }
+.eq-cab span { font-size: 13px; color: var(--tinta-2); }
+.eq-cab .eq-n { margin-left: auto; font-weight: 700; color: var(--palma); }
+.eq-vacio .eq-n { color: #A63D2F; }
+.eq-palmas { margin: 4px 0 0; font-size: 13px; color: var(--palma); font-weight: 700; }
+.eq-item { border-top: 1px solid var(--linea); margin-top: 8px; padding-top: 6px; }
+.eq-item small { display: block; font-size: 13px; color: var(--tinta-2); }
+.eq-item .eq-obs { font-style: italic; }
+.eq-tag { background: #F2C230; color: #3A2E00; border-radius: 8px; padding: 1px 6px; font-size: 12px; font-weight: 700; }
+.eq-lab { font-size: 12px; color: var(--tinta-2); }
+.eq-palma { background: var(--papel); border: 2px solid var(--palma); border-radius: var(--radio-m); padding: 10px 12px; }
+.eq-palma h3 { margin: 0 0 4px; font-size: 17px; }
+.eq-palma p { margin: 4px 0; font-size: 14px; }
+.eq-estado { font-weight: 700; color: var(--palma); }

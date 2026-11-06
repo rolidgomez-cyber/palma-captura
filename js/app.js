@@ -728,6 +728,7 @@
     document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.dataset.panel !== nombre; });
     document.querySelectorAll('.pestanas button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.ir === nombre)));
     if (nombre === 'envios') pintarEnvios();
+    if (nombre === 'equipo') abrirEquipo();
     window.scrollTo(0, 0);
   }
   document.querySelector('.pestanas').addEventListener('click', (ev) => {
@@ -781,7 +782,74 @@
   function pintarCabecera() {
     $('lider-nombre').textContent = sesion.lider.nombre;
     $('lider-labor').textContent = sesion.lider.labor;
+    const co = esCoord();
+    $('tab-equipo').hidden = !co;
+    document.querySelector('.pestanas').classList.toggle('cuatro', co);
   }
+
+  // ---------- Vista del coordinador (pestaña Equipo) ----------
+  function esCoord() { return !!(sesion && sesion.lider && /coordinador/i.test(sesion.lider.labor + ' ' + sesion.lider.nombre)); }
+  let eqCargado = '';
+  function nombreLote(id) { const l = lotePorId(id); return l ? proyectoCorto(l.proyecto) + ' · ' + loteCorto(l.lote) : String(id || 'Sin lote'); }
+  function abrirEquipo() {
+    if (!$('eq-fecha').value) $('eq-fecha').value = hoy();
+    if (!$('eq-proy').options.length) {
+      $('eq-proy').innerHTML = proyectos().map((p) => '<option value="' + esc(p) + '">' + esc(proyectoCorto(p)) + '</option>').join('');
+      llenarEqLotes();
+    }
+    if (eqCargado !== $('eq-fecha').value) cargarEquipo();
+  }
+  function llenarEqLotes() {
+    $('eq-lote').innerHTML = lotesDe($('eq-proy').value).map((l) => '<option value="' + esc(l.id) + '">' + esc(loteCorto(l.lote)) + '</option>').join('');
+  }
+  $('eq-proy').addEventListener('change', llenarEqLotes);
+  $('eq-fecha').addEventListener('change', cargarEquipo);
+  $('eq-cargar').addEventListener('click', cargarEquipo);
+  async function cargarEquipo() {
+    const box = $('eq-lista'), f = $('eq-fecha').value;
+    eqCargado = f;
+    if (!navigator.onLine) { box.innerHTML = '<p class="nota">Sin señal. La vista del equipo necesita conexión.</p>'; $('eq-resumen').textContent = ''; eqCargado = ''; return; }
+    box.innerHTML = '<p class="nota">Cargando lo que reportó el equipo…</p>';
+    try {
+      const r = await pedir(urlPuente() + '?action=coord&pin=' + encodeURIComponent(sesion.pin) + '&fecha=' + encodeURIComponent(f.split('-').reverse().join('/')), null, 90000);
+      if (!r || !r.ok) { box.innerHTML = '<p class="form-error">' + esc((r && r.error) || 'No se pudo cargar.') + '</p>'; eqCargado = ''; return; }
+      const con = r.lideres.filter((l) => l.items.length).length;
+      $('eq-resumen').textContent = r.fecha + ' · ' + con + ' con reporte · ' + r.sinReporte + ' sin reporte' + (r.porRevisar ? ' · ' + r.porRevisar + ' por revisar' : '');
+      box.innerHTML = '';
+      r.lideres.forEach((l) => {
+        const c = el('div', { class: 'eq-card' + (l.items.length ? '' : ' eq-vacio') });
+        let h = '<div class="eq-cab"><b>' + esc(l.nombre) + '</b><span>' + esc(l.labor || '') + '</span>' +
+          '<span class="eq-n">' + (l.items.length ? l.items.length + (l.items.length === 1 ? ' reporte' : ' reportes') : 'Sin reporte') + '</span></div>';
+        if (l.palmas) h += '<p class="eq-palmas">✓ ' + l.palmas + (l.palmas === 1 ? ' palma marcada' : ' palmas marcadas') + ' en la app</p>';
+        l.items.forEach((it) => {
+          h += '<div class="eq-item"><div><b>' + esc(nombreLote(it.lote)) + '</b>' + (it.revisar ? ' <span class="eq-tag">por revisar</span>' : '') +
+            (l.labor !== it.labor ? ' <span class="eq-lab">' + esc(it.labor) + '</span>' : '') + '</div>' +
+            '<small>' + [it.estado, it.tramo, it.cantidad !== null && it.cantidad !== undefined ? it.cantidad + ' ' + (CANTIDAD[it.labor] || '').toLowerCase() : '', it.palmas ? '✓ ' + it.palmas + (it.palmas === 1 ? ' palma' : ' palmas') : '']
+              .filter((x) => x !== '' && x !== undefined).map(esc).join(' · ') + '</small>' +
+            (it.obs ? '<small class="eq-obs">' + esc(it.obs) + '</small>' : '') + '</div>';
+        });
+        c.innerHTML = h;
+        box.appendChild(c);
+      });
+    } catch (e) { box.innerHTML = '<p class="form-error">No hubo respuesta. Intente de nuevo.</p>'; eqCargado = ''; }
+  }
+  $('eq-buscar').addEventListener('click', async () => {
+    const out = $('eq-palma'), id = $('eq-lote').value, l = $('eq-l').value, p = $('eq-p').value;
+    out.hidden = false;
+    if (!id || !l || !p) { out.innerHTML = '<p class="form-error">Escriba lote, línea y palma.</p>'; return; }
+    if (!navigator.onLine) { out.innerHTML = '<p class="nota">Sin señal.</p>'; return; }
+    out.innerHTML = '<p class="nota">Buscando…</p>';
+    try {
+      const r = await pedir(urlPuente() + '?action=palma&pin=' + encodeURIComponent(sesion.pin) + '&lote=' + encodeURIComponent(id) + '&l=' + l + '&p=' + p, null, 90000);
+      if (!r || !r.ok) { out.innerHTML = '<p class="form-error">' + esc((r && r.error) || 'No se pudo buscar.') + '</p>'; return; }
+      let h = '<h3>' + esc(nombreLote(id)) + ' · L' + r.linea + ' P' + r.palma + '</h3><p class="eq-estado">' + esc(r.estado) + '</p>';
+      h += '<p><b>Censos de PC:</b> ' + (r.censos.length ? r.censos.map((c) => esc(c.fecha) + ' ' + esc(c.estado.toLowerCase())).join(' · ') : 'ninguno') + '</p>';
+      h += '<p><b>Cirugías:</b> ' + (r.cirugias.length ? r.cirugias.map(esc).join(' · ') : 'ninguna') + '</p>';
+      h += '<p><b>Strategus:</b> ' + (r.strategus ? r.strategus.adultos + ' adultos · ' + (r.strategus.controlada ? 'ya controlada' : 'sin control') : 'no está en el censo de plagas') + '</p>';
+      if (r.app.length) h += '<p><b>Marcada en la app:</b> ' + r.app.map((a) => esc(a.fecha) + ' ' + esc(a.labor) + ' (' + esc(a.lider) + ')').join(' · ') + '</p>';
+      out.innerHTML = h;
+    } catch (e) { out.innerHTML = '<p class="form-error">No hubo respuesta. Intente de nuevo.</p>'; }
+  });
   function mostrarIngreso() {
     $('v-app').hidden = true;
     $('v-ingreso').hidden = false;
