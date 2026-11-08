@@ -152,8 +152,13 @@
   function labores() {
     const fijas = ['Censo Enfermedades', 'Monitoreo Plagas', 'Control PC', 'Control Strategus', 'Recolección PC', 'Lectura freatímetros', 'Otra labor'];
     const lista = (sesion.labores || []).filter((x) => x && fijas.includes(x));
-    return lista.length ? lista : fijas;
+    const todas = lista.length ? lista : fijas;
+    // cada líder solo trabaja su labor (más "Otra labor"); coordinador o "Puede registrar cualquier labor" ven todas
+    if (veTodo()) return todas;
+    const suya = sesion.lider && sesion.lider.labor;
+    return todas.includes(suya) ? [suya].concat(todas.includes('Otra labor') ? ['Otra labor'] : []) : todas;
   }
+  function veTodo() { return !!(sesion && sesion.lider && (/coordinador/i.test(sesion.lider.labor + ' ' + sesion.lider.nombre) || /cualquier/i.test(sesion.lider.notas || ''))); }
   function estados() { return (sesion.estados && sesion.estados.length) ? sesion.estados : ['Terminado', 'En avance', 'Revisión']; }
   function tipos() { return (sesion.tipos && sesion.tipos.length) ? sesion.tipos : ['Foco PC', 'Plaga', 'Strategus', 'Clima / día perdido', 'Seguridad', 'Otro']; }
 
@@ -387,6 +392,42 @@
   let marcas = leer(K.marcas, {});      // 'labor|lote' -> { censo, t0, m: { 'línea-palma': { s: 0 marcada | 1 enviada, x: 1 si se agregó a mano } } }
   let abierto = null;                   // { labor, id }
 
+  // ---------- Avance de la semana (igual que el DASHBOARD) ----------
+  function num(n, d) { return Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: d === undefined ? 1 : d }); }
+  function pintarSemana() {
+    const box = $('semana');
+    const S = casos && casos.datos && casos.datos.semana;
+    if (!S || !S.labores || !S.labores.length) { box.hidden = true; return; }
+    const lab = veTodo() ? ($('l-labor').value || S.labores[0].labor) : sesion.lider.labor;
+    const o = S.labores.find((x) => x.labor === lab) || (veTodo() ? null : S.labores[0]);
+    if (!o) { box.hidden = true; return; }
+    box.hidden = false;
+    let h = '<div class="sem-cab"><b>Semana ' + esc(S.desde) + ' al ' + esc(S.hasta) + '</b><span>' + esc(o.labor) + ' · ' + S.diasTranscurridos + ' de ' + S.diasHabiles + ' días</span></div>';
+    let pct = 0;
+    if (o.labor === 'Control PC') {
+      const cumpl = o.diasCumplidos || 0, dias = (o.dias || []).length;
+      pct = dias ? cumpl / dias : 0;
+      h += '<div class="sem-fila"><span>Días cumplidos (≥ ' + num(o.meta, 0) + ' cirugías por persona o lote cerrado)</span><b>' + cumpl + ' de ' + dias + '</b></div>';
+      h += '<div class="sem-fila"><span>Cirugías en la semana</span><b>' + num(o.cirugias, 0) + (o.metaCirHoy ? ' de ' + num(o.metaCirHoy, 0) : '') + '</b></div>';
+      h += '<div class="sem-fila"><span>Ha de lotes cerrados en la semana</span><b>' + num(o.ha) + ' ha</b></div>';
+      if (o.haGuineensis) h += '<div class="sem-fila"><span>Avance del mes (Guineensis)</span><b>' + num(o.haMes) + ' de ' + num(o.haGuineensis) + ' ha</b></div>';
+      if (o.dias && o.dias.length) h += '<div class="sem-dias">' + o.dias.map((d) => '<span class="' + (d.cumplido ? 'ok' : (d.personas ? 'no' : 'sin')) + '">' + esc(d.dia.slice(0, 2)) + '<small>' + (d.personas ? num(d.promedio, 0) : '—') + '</small></span>').join('') + '</div>';
+      if (o.cirugiasPend) h += '<p class="sem-nota">+ ' + num(o.cirugiasPend, 0) + ' cirugías enviadas por aprobar</p>';
+    } else {
+      pct = o.metaHoy ? o.ha / o.metaHoy : 0;
+      h += '<div class="sem-fila"><span>Meta de la semana</span><b>' + num(o.metaSemana) + ' ha</b></div>';
+      h += '<div class="sem-fila"><span>A hoy debería ir</span><b>' + num(o.metaHoy) + ' ha</b></div>';
+      h += '<div class="sem-fila grande"><span>Lleva</span><b>' + num(o.ha) + ' ha · ' + Math.round(pct * 100) + ' %</b></div>';
+      h += '<div class="sem-barra"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
+      if (o.pendientes) h += '<p class="sem-nota">+ ' + o.pendientes + ' reporte(s) enviado(s) por aprobar</p>';
+    }
+    const est = pct >= 1 ? 'al día' : pct >= 0.8 ? 'un poco atrasado' : 'atrasado';
+    box.className = 'semana ' + (pct >= 1 ? 'sem-ok' : pct >= 0.8 ? 'sem-medio' : 'sem-bajo');
+    h += '<p class="sem-estado">' + (S.diasTranscurridos ? 'Va ' + est : 'La semana empieza hoy') + ' · cuenta lo aprobado por el coordinador</p>';
+    box.innerHTML = h;
+  }
+  $('l-labor').addEventListener('change', () => { if (veTodo()) pintarSemana(); });
+
   async function cargarCasos() {
     if (!navigator.onLine || !sesion || !urlPuente()) return false;
     try {
@@ -394,7 +435,7 @@
       if (!r || !r.ok) return false;
       casos = { hora: Date.now(), datos: r };
       guardar(K.casos, casos);
-      pintarLotes(); pintarDetalle(); pintarStrat();
+      pintarLotes(); pintarDetalle(); pintarStrat(); pintarSemana();
       if (abierto) pintarCasos();
       return true;
     } catch (e) { return false; }
@@ -653,6 +694,7 @@
       enviados = salen.map((it) => ({ uid: it.uid, tipo: it.tipo, fecha: it.fecha, labor: it.labor, lote: it.lote, estado: it.estado,
         _txt: it._txt, _sub: it._sub, _enviado: ahora })).concat(enviados).slice(0, MAX_ENVIADOS);
       guardar(K.cola, cola); guardar(K.enviados, enviados);
+      if (salen.length) setTimeout(cargarCasos, 1500);   // avance de la semana al día
       if (salen.length && forzar) avisar(salen.length === 1 ? '1 envío llegó a la hoja.' : salen.length + ' envíos llegaron a la hoja.');
       if (cola.some((it) => !it._error)) setTimeout(() => enviar(), 500);
     } catch (e) {
@@ -882,7 +924,8 @@
     pintarStrat();
     irA('labor');
     enviar();
-    if (!casos || Date.now() - casos.hora > 3 * 3600 * 1000) cargarCasos();
+    pintarSemana();
+    if (!casos || Date.now() - casos.hora > 30 * 60 * 1000) cargarCasos();
     // lotes al día una vez por día
     if (Date.now() - (sesion.actualizado || 0) > 12 * 3600 * 1000) actualizarLotes();
   }

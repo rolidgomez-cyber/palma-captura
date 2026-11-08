@@ -362,3 +362,25 @@ main { padding: 14px 14px calc(96px + env(safe-area-inset-bottom)); max-width: 5
 .eq-palma h3 { margin: 0 0 4px; font-size: 17px; }
 .eq-palma p { margin: 4px 0; font-size: 14px; }
 .eq-estado { font-weight: 700; color: var(--palma); }
+
+/* Avance de la semana */
+.semana { border-radius: var(--radio-m); padding: 12px 14px; border: 2px solid var(--linea); background: var(--papel); display: flex; flex-direction: column; gap: 6px; }
+.semana.sem-ok { border-color: #2E8B57; background: #EEF8F1; }
+.semana.sem-medio { border-color: #D9A21B; background: #FFF8E6; }
+.semana.sem-bajo { border-color: #D98C7E; background: #FDF1EE; }
+.sem-cab { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; align-items: baseline; }
+.sem-cab b { font-size: 16px; }
+.sem-cab span { font-size: 13px; color: var(--tinta-2); }
+.sem-fila { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.sem-fila span { color: var(--tinta-2); }
+.sem-fila.grande b { font-size: 18px; }
+.sem-barra { height: 10px; border-radius: 5px; background: #E3E8E4; overflow: hidden; }
+.sem-barra i { display: block; height: 100%; background: var(--palma); }
+.sem-dias { display: flex; gap: 6px; flex-wrap: wrap; }
+.sem-dias span { display: grid; place-items: center; min-width: 40px; padding: 4px 6px; border-radius: 8px; font-weight: 700; font-size: 13px; background: #E3E8E4; }
+.sem-dias span small { font-weight: 400; font-size: 11px; }
+.sem-dias span.ok { background: #B7E0CD; color: #0A6D3C; }
+.sem-dias span.no { background: #F6D6D0; color: #8A2A1A; }
+.sem-nota { margin: 0; font-size: 12px; color: var(--tinta-2); }
+.sem-estado { margin: 0; font-size: 13px; font-weight: 700; }
+.sem-fila b { white-space: nowrap; }
