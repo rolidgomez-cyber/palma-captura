@@ -402,28 +402,40 @@
     const o = S.labores.find((x) => x.labor === lab) || (veTodo() ? null : S.labores[0]);
     if (!o) { box.hidden = true; return; }
     box.hidden = false;
-    let h = '<div class="sem-cab"><b>Semana ' + esc(S.desde) + ' al ' + esc(S.hasta) + '</b><span>' + esc(o.labor) + ' · ' + S.diasTranscurridos + ' de ' + S.diasHabiles + ' días</span></div>';
-    let pct = 0;
-    if (o.labor === 'Control PC') {
+    const pc = o.labor === 'Control PC';
+    let h = '<div class="sem-cab"><b>' + esc(o.labor) + (o.mes ? ' · ' + esc(o.mes) : '') + '</b></div>';
+    let clase = '';
+    if (o.programadoMes !== undefined) {
+      h += '<div class="sem-fila"><span>Meta al cierre de esta semana (sáb ' + esc(S.sabado || S.hasta) + ')</span><b>' + Math.round((o.esperadoCierre || 0) * 100) + ' % = ' + num(o.metaCierreHa, 0) + ' ha</b></div>';
+      h += '<div class="sem-fila grande"><span>Mes</span><b>' + num(o.hechoMes, 0) + ' de ' + num(o.programadoMes, 0) + ' ha · ' + Math.round((o.pctMes || 0) * 100) + ' %</b></div>';
+      h += '<div class="sem-barra"><i style="width:' + Math.min(100, Math.round((o.pctMes || 0) * 100)) + '%"></i><em style="left:' + Math.min(100, Math.round((o.esperadoCierre || 0) * 100)) + '%"></em></div>';
+      if (o.falta > 0) {
+        h += '<div class="sem-fila grande"><span>Le faltan</span><b>' + num(o.falta, 0) + ' ha para cumplir meta</b></div>';
+        if (o.necesitaPorPersonaDia) {
+          h += '<div class="sem-fila"><span>Necesita</span><b>' + num(o.necesitaPorPersonaDia) + ' ha por persona/día <small>(meta normal: ' + num(o.metaHaPersonaDia, 0) + ')</small></b></div>';
+          h += '<p class="sem-nota">' + o.personas + ' personas · ' + o.quedanDias + (o.quedanDias === 1 ? ' día hábil que queda' : ' días hábiles que quedan') + ' en la semana</p>';
+        }
+        clase = o.necesitaPorPersonaDia && o.necesitaPorPersonaDia <= o.metaHaPersonaDia * 1.2 ? 'sem-medio' : 'sem-bajo';
+        if (o.necesitaPorPersonaDia && o.necesitaPorPersonaDia <= o.metaHaPersonaDia) clase = 'sem-medio';
+      } else {
+        h += '<div class="sem-fila grande"><span>Va adelantado</span><b>' + num(-o.falta, 0) + ' ha sobre la meta</b></div>';
+        clase = 'sem-ok';
+      }
+    }
+    h += '<hr class="sem-sep">';
+    if (pc) {
       const cumpl = o.diasCumplidos || 0, dias = (o.dias || []).length;
-      pct = dias ? cumpl / dias : 0;
-      h += '<div class="sem-fila"><span>Días cumplidos (≥ ' + num(o.meta, 0) + ' cirugías por persona o lote cerrado)</span><b>' + cumpl + ' de ' + dias + '</b></div>';
-      h += '<div class="sem-fila"><span>Cirugías en la semana</span><b>' + num(o.cirugias, 0) + (o.metaCirHoy ? ' de ' + num(o.metaCirHoy, 0) : '') + '</b></div>';
-      h += '<div class="sem-fila"><span>Ha de lotes cerrados en la semana</span><b>' + num(o.ha) + ' ha</b></div>';
-      if (o.haGuineensis) h += '<div class="sem-fila"><span>Avance del mes (Guineensis)</span><b>' + num(o.haMes) + ' de ' + num(o.haGuineensis) + ' ha</b></div>';
+      h += '<div class="sem-fila"><span>Esta semana: ha de lotes cerrados</span><b>' + num(o.ha) + ' ha</b></div>';
+      if (dias) h += '<div class="sem-fila"><span>Días cumplidos (≥ ' + num(o.meta, 0) + ' cirugías por persona o lote cerrado)</span><b>' + cumpl + ' de ' + dias + '</b></div>';
+      h += '<div class="sem-fila"><span>Cirugías en la semana</span><b>' + num(o.cirugias, 0) + '</b></div>';
       if (o.dias && o.dias.length) h += '<div class="sem-dias">' + o.dias.map((d) => '<span class="' + (d.cumplido ? 'ok' : (d.personas ? 'no' : 'sin')) + '">' + esc(d.dia.slice(0, 2)) + '<small>' + (d.personas ? num(d.promedio, 0) : '—') + '</small></span>').join('') + '</div>';
       if (o.cirugiasPend) h += '<p class="sem-nota">+ ' + num(o.cirugiasPend, 0) + ' cirugías enviadas por aprobar</p>';
     } else {
-      pct = o.metaHoy ? o.ha / o.metaHoy : 0;
-      h += '<div class="sem-fila"><span>Meta de la semana</span><b>' + num(o.metaSemana) + ' ha</b></div>';
-      h += '<div class="sem-fila"><span>A hoy debería ir</span><b>' + num(o.metaHoy) + ' ha</b></div>';
-      h += '<div class="sem-fila grande"><span>Lleva</span><b>' + num(o.ha) + ' ha · ' + Math.round(pct * 100) + ' %</b></div>';
-      h += '<div class="sem-barra"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
+      h += '<div class="sem-fila"><span>Esta semana (' + esc(S.desde) + ' al ' + esc(S.hasta) + '): lleva</span><b>' + num(o.ha, 0) + ' de ' + num(o.metaSemana, 0) + ' ha</b></div>';
       if (o.pendientes) h += '<p class="sem-nota">+ ' + o.pendientes + ' reporte(s) enviado(s) por aprobar</p>';
     }
-    const est = pct >= 1 ? 'al día' : pct >= 0.8 ? 'un poco atrasado' : 'atrasado';
-    box.className = 'semana' + (S.diasTranscurridos ? ' ' + (pct >= 1 ? 'sem-ok' : pct >= 0.8 ? 'sem-medio' : 'sem-bajo') : '');
-    h += '<p class="sem-estado">' + (S.diasTranscurridos ? 'Va ' + est + ' · cuenta lo aprobado por el coordinador' : 'La semana empieza el lunes ' + esc(S.desde) + '. ¡Buena semana!') + '</p>';
+    box.className = 'semana' + (clase ? ' ' + clase : '');
+    h += '<p class="sem-estado">' + (S.diasTranscurridos ? 'Cuenta lo aprobado por el coordinador' : 'La semana empieza el lunes ' + esc(S.desde) + '. ¡Buena semana!') + '</p>';
     box.innerHTML = h;
   }
   $('l-labor').addEventListener('change', () => { if (veTodo()) pintarSemana(); });
