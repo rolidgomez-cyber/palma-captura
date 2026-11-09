@@ -422,8 +422,8 @@
       if (o.pendientes) h += '<p class="sem-nota">+ ' + o.pendientes + ' reporte(s) enviado(s) por aprobar</p>';
     }
     const est = pct >= 1 ? 'al día' : pct >= 0.8 ? 'un poco atrasado' : 'atrasado';
-    box.className = 'semana ' + (pct >= 1 ? 'sem-ok' : pct >= 0.8 ? 'sem-medio' : 'sem-bajo');
-    h += '<p class="sem-estado">' + (S.diasTranscurridos ? 'Va ' + est : 'La semana empieza hoy') + ' · cuenta lo aprobado por el coordinador</p>';
+    box.className = 'semana' + (S.diasTranscurridos ? ' ' + (pct >= 1 ? 'sem-ok' : pct >= 0.8 ? 'sem-medio' : 'sem-bajo') : '');
+    h += '<p class="sem-estado">' + (S.diasTranscurridos ? 'Va ' + est + ' · cuenta lo aprobado por el coordinador' : 'La semana empieza el lunes ' + esc(S.desde) + '. ¡Buena semana!') + '</p>';
     box.innerHTML = h;
   }
   $('l-labor').addEventListener('change', () => { if (veTodo()) pintarSemana(); });
