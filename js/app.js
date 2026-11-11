@@ -1,5 +1,6 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
+ * v1.14 (10/11/2026): la palma marcada o ya trabajada sale del listado (Deshacer / Ver también las marcadas); marcas del equipo al día al abrir el lote.
  * v1.13 (10/11/2026): PIN de operario: ve las cuatro labores, marca palmas y las marcas van al libro (MARCAS EQUIPO); el líder incluye las marcas del equipo en su reporte.
  * v1.5 (02/11/2026): Strategus por línea - palma; palmas con posible error de escritura en el listado de censo.
  * v1.4 (02/11/2026): listado de casos por lote (línea - palma) para Control PC, Censo y Strategus.
@@ -520,9 +521,51 @@
     abierto = { labor: labor, id: id };
     $('casos-ocultar').checked = false;
     $('casos-nl').value = ''; $('casos-np').value = '';
+    $('casos-aviso').hidden = true;
     pintarCasos();
     $('casos').showModal();
     $('casos-cuerpo').scrollTop = 0;
+    traerMarcasLote(id);
+  }
+  // Marcas del equipo de este lote, al día (liviano). Así lo que marcó un compañero sale del listado.
+  async function traerMarcasLote(id) {
+    if (!navigator.onLine || !casos || !casos.datos || !urlPuente()) return;
+    try {
+      const r = await pedir(urlPuente() + '?action=marcas&pin=' + encodeURIComponent(sesion.pin) + '&lote=' + encodeURIComponent(id), null, 20000);
+      if (!r || !r.ok || !r.eq) return;
+      const E = casos.datos.eq = casos.datos.eq || {};
+      Object.keys(MARCA_LAB).forEach((lab) => {
+        if (r.eq[lab] && r.eq[lab].length) (E[lab] = E[lab] || {})[id] = r.eq[lab];
+        else if (E[lab]) delete E[lab][id];
+      });
+      guardar(K.casos, casos);
+      if (abierto && abierto.id === id) pintarCasos();
+    } catch (e) { /* sin señal: se queda con lo último descargado */ }
+  }
+  // Avisos dentro del listado (con Deshacer cuando aplica)
+  let tAvisoC, deshacerFn = null;
+  const recien = {};   // palmas recién marcadas: se ven en verde un momento antes de salir del listado
+  function avisarCasos(msg, deshacer) {
+    $('casos-aviso-txt').textContent = msg;
+    deshacerFn = deshacer || null;
+    $('casos-deshacer').hidden = !deshacer;
+    $('casos-aviso').hidden = false;
+    clearTimeout(tAvisoC);
+    tAvisoC = setTimeout(() => { $('casos-aviso').hidden = true; deshacerFn = null; }, deshacer ? 6000 : 3500);
+  }
+  $('casos-deshacer').addEventListener('click', () => { const f = deshacerFn; deshacerFn = null; $('casos-aviso').hidden = true; if (f) f(); });
+  function salirDelListado(k) {
+    clearTimeout(recien[k]);
+    recien[k] = setTimeout(() => {
+      delete recien[k];
+      if (!abierto || $('casos-ocultar').checked) return;
+      const b = $('casos-cuerpo').querySelector('.palma[data-k="' + k + '"]');
+      if (!b || !(b.classList.contains('hecha') || b.classList.contains('enviada'))) return;
+      const cont = b.parentNode, fila = cont.parentNode;
+      b.remove();
+      if (!cont.children.length) fila.remove();
+      if (!$('casos-cuerpo').querySelector('.palma')) pintarCasos();
+    }, 1500);
   }
 
   function pintarCasos() {
@@ -546,34 +589,46 @@
     todas.forEach((x) => { (porLinea[x[0]] = porLinea[x[0]] || []).push(x); });
     const hechas = todas.filter((x) => mm.m[x[0] + '-' + x[1]]).length;
     const deEquipo = todas.filter((x) => { const k = x[0] + '-' + x[1]; return !mm.m[k] && eq[k]; }).length;
+    const yaRonda = (x) => (esPC && x[2] === 0) || (esST && x[3] === 0);      // ya con cirugía / control en esta ronda
+    const faltan = todas.filter((x) => { const k = x[0] + '-' + x[1]; return !mm.m[k] && !eq[k] && !yaRonda(x); }).length;
 
     $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + labor;
     $('casos-sub').textContent = esPC ? (casos && casos.datos.pcFuente === 'PC LIDERES' ? 'Palmas con PC reportadas (listado oficial SIGAIND)' : 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—'))
                                : esST ? (labor === 'Monitoreo Plagas' ? 'Censo de plagas · palmas con Strategus del lote para verificar' : 'Censo de plagas · todas las palmas con Strategus del lote')
                                       : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
-    $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + (esConsulta() ? 'marcadas en mi lista' : marcaTxt(labor) + (esOperario() ? ' por usted' : '')) +
+    $('casos-cuenta').textContent = 'Faltan ' + faltan + ' de ' + todas.length + ' palmas · ' + (esOperario() ? 'usted marcó ' + hechas : hechas + ' ' + (esConsulta() ? 'marcadas en mi lista' : 'marcadas para su reporte')) +
       (deEquipo ? ' · 👥 ' + deEquipo + ' del equipo' : '');
     const bEq = $('casos-equipo');
     bEq.hidden = soloMarca() || !eqOtros.length;
     bEq.textContent = 'Incluir en mi reporte las ' + eqOtros.length + ' marcadas por el equipo';
-    $('casos-ley').textContent = esPC ? '★ reincidente o grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero · borde oscuro: sin control · gris: ya controlada, revisar'
+    $('casos-ley').textContent = esPC ? '★ reincidente o grave: atender primero · al marcar una palma sale del listado' : esST ? '★ 3 o más adultos: atender primero · al marcar una palma sale del listado'
                                       : '★ grave · punteado: cirugía sin censo · ✎ posible error de escritura: dar de alta';
     $('casos-nueva-txt').textContent = esConsulta() ? 'Palma que no está en la lista: escriba línea y palma para anotarla en su lista. Avísele al líder.'
                                      : esOperario() ? 'Palma que no está en la lista: escriba línea y palma. Le llega al líder como palma nueva.'
                                      : labor === 'Monitoreo Plagas' ? 'Palma con plaga que no está en la lista: escriba línea y palma. Se reporta en observaciones.' : esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
                                      : esST ? 'Palma con Strategus que no está en la lista: escriba línea y palma. Se reporta en observaciones.'
                                             : 'Palma nueva con PC: escriba línea y palma. Se reporta en observaciones.';
-    const ocultar = $('casos-ocultar').checked;
+    const verTodas = $('casos-ocultar').checked;      // "Ver también las marcadas"
+    const soloMarcaP = soloMarca();
+    const oculta = (x) => {
+      const k = x[0] + '-' + x[1];
+      if (verTodas || recien[k]) return false;
+      if (mm.m[k] || yaRonda(x)) return true;
+      if (!eq[k]) return false;
+      // marcada por el equipo: el operario ya no la ve; el líder la ve en azul hasta incluirla en su reporte
+      return soloMarcaP || eq[k].some((q) => q.indexOf(yo() + ' ') === 0);
+    };
+    const tope = $('casos-cuerpo').scrollTop;
     const c = $('casos-cuerpo');
     c.innerHTML = '';
     const lineas = Object.keys(porLinea).map(Number).sort((a, b) => a - b);
     let pintadas = 0;
     lineas.forEach((ln) => {
       const ps = porLinea[ln].sort((a, b) => a[1] - b[1]);
-      const visibles = ps.filter((x) => !(ocultar && mm.m[x[0] + '-' + x[1]]));
+      const visibles = ps.filter((x) => !oculta(x));
       if (!visibles.length) return;
       const fila = el('div', { class: 'casos-linea' });
-      fila.appendChild(el('b', {}, 'Línea ' + ln + '<small>' + ps.length + (ps.length === 1 ? ' palma' : ' palmas') + '</small>'));
+      fila.appendChild(el('b', {}, 'Línea ' + ln + '<small>' + (verTodas ? ps.length + (ps.length === 1 ? ' palma' : ' palmas') : (visibles.length === 1 ? 'falta 1' : 'faltan ' + visibles.length)) + '</small>'));
       const cont = el('div', { class: 'casos-palmas' });
       visibles.forEach((x) => {
         const k = x[0] + '-' + x[1], st = mm.m[k];
@@ -593,7 +648,8 @@
       fila.appendChild(cont);
       c.appendChild(fila);
     });
-    if (!pintadas) c.appendChild(el('p', { class: 'casos-vacio', text: todas.length ? 'Todas las palmas están marcadas. 👏' : 'No hay palmas en el listado de este lote.' }));
+    if (!pintadas) c.appendChild(el('p', { class: 'casos-vacio', text: todas.length ? 'No falta ninguna palma en este lote. 👏 Para revisar o corregir, active "Ver también las marcadas".' : 'No hay palmas en el listado de este lote.' }));
+    c.scrollTop = tope;
   }
 
   function guardarMarca(mm) {
@@ -612,31 +668,40 @@
         delete mm.m[k]; guardarMarca(mm); pintarCasos(); pintarSemana(); return;
       }
       const otros = eqK.filter((x) => x[2] !== yo());
-      if (!mm.m[k] && otros.length) return avisar('Ya la marcó ' + otros.map((x) => x[2] + ' el ' + x[3]).join(', ') + '.');
-    } else if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
-    if (mm.m[k]) delete mm.m[k];
-    else {
-      mm.m[k] = { s: 0, t: Date.now() };
-      const otro = eqK.find((x) => x[2] !== yo());
-      if (otro && !soloMarca()) { mm.m[k].eq = otro[2]; if (otro[4]) mm.m[k].x = 1; }
-    }
+      if (!mm.m[k] && otros.length) return avisarCasos('Ya la marcó ' + otros.map((x) => x[2] + ' el ' + x[3]).join(', ') + '.');
+    } else if (mm.m[k] && mm.m[k].s === 1) return avisarCasos('Esa palma ya se envió en un reporte.');
+    const labor = abierto.labor, id = abierto.id;
+    const quitar = () => {
+      const m2 = marcasDe(labor, id);
+      delete m2.m[k]; clearTimeout(recien[k]); delete recien[k];
+      marcas[claveM(labor, id)] = m2; guardar(K.marcas, marcas);
+      if (abierto) pintarCasos();
+      if (esOperario()) pintarSemana();
+    };
+    if (mm.m[k]) { quitar(); $('casos-aviso').hidden = true; return; }
+    mm.m[k] = { s: 0, t: Date.now() };
+    const otro = eqK.find((x) => x[2] !== yo());
+    if (otro && !soloMarca()) { mm.m[k].eq = otro[2]; if (otro[4]) mm.m[k].x = 1; }
     guardarMarca(mm);
+    salirDelListado(k);
     pintarCasos();
+    avisarCasos('✓ Línea ' + k.replace('-', ', palma ') + ' marcada', quitar);
     if (esOperario()) pintarSemana();
   });
   $('casos-ocultar').addEventListener('change', pintarCasos);
   $('casos-agregar').addEventListener('click', () => {
     const ln = Math.round(Number($('casos-nl').value)), pm = Math.round(Number($('casos-np').value));
-    if (!(ln >= 1 && ln <= 300) || !(pm >= 1 && pm <= 80)) return avisar('Revisa la línea (1 a 300) y la palma (1 a 80).');
+    if (!(ln >= 1 && ln <= 300) || !(pm >= 1 && pm <= 80)) return avisarCasos('Revisa la línea (1 a 300) y la palma (1 a 80).');
     const mm = marcasDe(abierto.labor, abierto.id), k = ln + '-' + pm;
-    if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
+    if (mm.m[k] && mm.m[k].s === 1) return avisarCasos('Esa palma ya se envió en un reporte.');
     const d = datosLote(abierto.id) || {};
     const lista = filasDe(d, LISTA[abierto.labor]);
     const enLista = lista.some((x) => x[0] === ln && x[1] === pm);
     mm.m[k] = enLista ? { s: 0, t: Date.now() } : { s: 0, x: 1, t: Date.now() };
     guardarMarca(mm);
     $('casos-nl').value = ''; $('casos-np').value = '';
-    avisar(enLista ? 'Esa palma ya estaba en la lista: quedó marcada.' : 'Palma agregada: línea ' + ln + ', palma ' + pm + '.');
+    salirDelListado(k);
+    avisarCasos(enLista ? 'Esa palma ya estaba en la lista: quedó marcada.' : '✓ Palma agregada y marcada: línea ' + ln + ', palma ' + pm + '.');
     pintarCasos();
     if (esOperario()) pintarSemana();
   });
@@ -646,7 +711,7 @@
     const otros = eqNoMias(abierto.labor, abierto.id);
     otros.forEach((x) => { const o = { s: 0, t: Date.now(), eq: x[2] }; if (x[4]) o.x = 1; mm.m[x[0] + '-' + x[1]] = o; });
     guardarMarca(mm);
-    avisar(otros.length + ' palmas del equipo quedaron marcadas para su reporte.');
+    avisarCasos(otros.length + ' palmas del equipo quedaron marcadas para su reporte.');
     pintarCasos();
   });
   // Operario: lo marcado se envía al libro (MARCAS EQUIPO) al cerrar el listado
@@ -812,7 +877,7 @@
       enviados = salen.map((it) => ({ uid: it.uid, tipo: it.tipo, fecha: it.fecha, labor: it.labor, lote: it.lote, estado: it.estado,
         _txt: it._txt, _sub: it._sub, _enviado: ahora })).concat(enviados).slice(0, MAX_ENVIADOS);
       guardar(K.cola, cola); guardar(K.enviados, enviados);
-      if (salen.length) setTimeout(cargarCasos, 1500);   // avance de la semana al día
+      if (salen.some((it) => it.tipo !== 'marca')) setTimeout(cargarCasos, 1500);   // avance de la semana al día (las marcas de operario no lo cambian)
       if (salen.length && forzar) avisar(salen.length === 1 ? '1 envío llegó a la hoja.' : salen.length + ' envíos llegaron a la hoja.');
       if (cola.some((it) => !it._error)) setTimeout(() => enviar(), 500);
     } catch (e) {

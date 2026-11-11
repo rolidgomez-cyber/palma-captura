@@ -408,3 +408,8 @@ body.consulta:not(.operario) .solo-envia { display: none !important; }
 .sem-mio b { color: var(--palma); }
 .eq-op { border-color: #B9D0DD; }
 .eq-palmas.eq-bajo { color: var(--pendiente); }
+
+/* Aviso dentro del listado, con Deshacer */
+.casos-aviso { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; padding: 8px 12px; border-radius: 10px; background: #12211A; color: #fff; font-weight: 700; font-size: 15px; }
+.casos-aviso[hidden] { display: none; }
+.casos-aviso button { flex: none; min-height: 40px; padding: 0 14px; border-radius: 8px; border: 2px solid #F5C518; background: transparent; color: #F5C518; font: inherit; font-weight: 700; }

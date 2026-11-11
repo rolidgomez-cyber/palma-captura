@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=1.13">
+<link rel="stylesheet" href="css/app.css?v=1.14">
 </head>
 <body>
 
@@ -224,13 +224,14 @@
     <p id="casos-sub"></p>
     <p class="casos-cuenta" id="casos-cuenta"></p>
     <div class="casos-herr">
-      <label class="casos-ocultar"><input type="checkbox" id="casos-ocultar"> Ocultar las marcadas</label>
+      <label class="casos-ocultar"><input type="checkbox" id="casos-ocultar"> Ver también las marcadas</label>
       <span class="casos-ley" id="casos-ley"></span>
     </div>
     <button type="button" class="btn-sec casos-equipo" id="casos-equipo" hidden>Incluir marcas del equipo</button>
   </div>
   <div class="casos-cuerpo" id="casos-cuerpo"></div>
   <div class="casos-pie">
+    <div class="casos-aviso" id="casos-aviso" role="status" aria-live="polite" hidden><span id="casos-aviso-txt"></span><button type="button" id="casos-deshacer">Deshacer</button></div>
     <div class="casos-nueva">
       <input type="number" inputmode="numeric" id="casos-nl" placeholder="Línea" min="1">
       <input type="number" inputmode="numeric" id="casos-np" placeholder="Palma" min="1">
@@ -243,6 +244,6 @@
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1.2"></script>
-<script src="js/app.js?v=1.13"></script>
+<script src="js/app.js?v=1.14"></script>
 </body>
 </html>
