@@ -389,3 +389,22 @@ main { padding: 14px 14px calc(96px + env(safe-area-inset-bottom)); max-width: 5
 .sem-sep { border: 0; border-top: 1px dashed var(--linea); margin: 4px 0; width: 100%; }
 .sem-fila small { font-weight: 400; color: var(--tinta-2); }
 .sem-fila span { flex: 1; }
+
+/* Modo consulta (PIN de consulta): solo ver listados y avance */
+.solo-consulta { display: none; }
+body.consulta .solo-consulta { display: block; }
+body.consulta .solo-lider { display: none !important; }
+.aviso-consulta { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #eef5ec; border: 1px solid #b9d3b2; font-size: .92rem; line-height: 1.35; color: #24402a; }
+body.consulta main { padding-bottom: 24px; }
+
+/* Operario (PIN por persona): marca palmas, no reporta */
+.solo-operario { display: none; }
+body.operario .solo-operario { display: block; }
+body.operario .solo-consulta { display: none; }
+body.consulta:not(.operario) .solo-envia { display: none !important; }
+.palma.equipo { background: #DCEAF3; border-color: #2E6B8A; color: #1E4A61; }
+.palma.equipo::before { content: "👥 "; font-size: 11px; }
+.casos-equipo { width: 100%; margin-top: 8px; background: #2E6B8A; color: #fff; border-color: #2E6B8A; }
+.sem-mio b { color: var(--palma); }
+.eq-op { border-color: #B9D0DD; }
+.eq-palmas.eq-bajo { color: var(--pendiente); }

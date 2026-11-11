@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=1.12">
+<link rel="stylesheet" href="css/app.css?v=1.13">
 </head>
 <body>
 
@@ -56,7 +56,7 @@
     <button type="button" class="barra-menu" id="btn-menu" aria-label="Opciones">⋮</button>
   </header>
 
-  <button type="button" class="estado-envio" id="estado-envio" data-estado="ok">
+  <button type="button" class="estado-envio solo-envia" id="estado-envio" data-estado="ok">
     <span class="estado-num" id="estado-num">0</span>
     <span class="estado-txt" id="estado-txt">Todo enviado</span>
   </button>
@@ -64,9 +64,11 @@
   <main>
     <!-- ---------- LABOR ---------- -->
     <form id="f-labor" class="panel" data-panel="labor" novalidate>
+      <p class="aviso-consulta solo-consulta">👀 <b>Modo consulta.</b> Aquí ve los listados y el avance de su labor. Puede marcar palmas como lista de chequeo: esas marcas quedan solo en este teléfono. El líder es quien reporta.</p>
+      <p class="aviso-consulta solo-operario">🌴 <b>Operario.</b> Elija la labor que le tocó hoy, el lote y toque <b>Ver listado</b>. Marque cada palma que trabajó y toque <b>Listo</b>: sus marcas llegan al libro con su nombre. El líder es quien reporta la labor.</p>
       <section class="semana" id="semana" hidden aria-live="polite"></section>
       <div class="fila-2">
-        <label class="campo">
+        <label class="campo solo-lider">
           <span>Fecha</span>
           <input type="date" id="l-fecha" required>
         </label>
@@ -93,20 +95,20 @@
         <p class="leyenda"><span class="marca-g">G</span> Guineensis</p>
       </fieldset>
 
-      <fieldset class="campo">
+      <fieldset class="campo solo-lider">
         <legend>Estado</legend>
         <div class="estados" id="l-estados"></div>
       </fieldset>
 
       <div id="l-detalle" class="detalle" hidden></div>
 
-      <label class="campo">
+      <label class="campo solo-lider">
         <span>Observaciones</span>
         <textarea id="l-obs" rows="2" placeholder="Opcional"></textarea>
       </label>
 
       <p class="form-error" id="l-error" role="alert"></p>
-      <button type="submit" class="btn-principal" id="l-guardar">Guardar labor</button>
+      <button type="submit" class="btn-principal solo-lider" id="l-guardar">Guardar labor</button>
     </form>
 
     <!-- ---------- NOVEDAD ---------- -->
@@ -184,7 +186,7 @@
     </section>
   </main>
 
-  <nav class="pestanas" role="tablist">
+  <nav class="pestanas solo-lider" role="tablist">
     <button type="button" role="tab" data-ir="labor" aria-selected="true">Labor</button>
     <button type="button" role="tab" data-ir="novedad" aria-selected="false">Novedad</button>
     <button type="button" role="tab" data-ir="envios" aria-selected="false">Envíos <span class="pestana-num" id="pestana-num" hidden>0</span></button>
@@ -225,6 +227,7 @@
       <label class="casos-ocultar"><input type="checkbox" id="casos-ocultar"> Ocultar las marcadas</label>
       <span class="casos-ley" id="casos-ley"></span>
     </div>
+    <button type="button" class="btn-sec casos-equipo" id="casos-equipo" hidden>Incluir marcas del equipo</button>
   </div>
   <div class="casos-cuerpo" id="casos-cuerpo"></div>
   <div class="casos-pie">
@@ -240,6 +243,6 @@
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1.2"></script>
-<script src="js/app.js?v=1.12"></script>
+<script src="js/app.js?v=1.13"></script>
 </body>
 </html>

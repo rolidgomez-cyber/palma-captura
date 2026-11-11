@@ -1,5 +1,6 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
+ * v1.13 (10/11/2026): PIN de operario: ve las cuatro labores, marca palmas y las marcas van al libro (MARCAS EQUIPO); el líder incluye las marcas del equipo en su reporte.
  * v1.5 (02/11/2026): Strategus por línea - palma; palmas con posible error de escritura en el listado de censo.
  * v1.4 (02/11/2026): listado de casos por lote (línea - palma) para Control PC, Censo y Strategus.
  * Habla con el puente de Apps Script v2.9:
@@ -155,9 +156,13 @@
     const todas = lista.length ? lista : fijas;
     // cada líder solo trabaja su labor (más "Otra labor"); coordinador o "Puede registrar cualquier labor" ven todas
     if (veTodo()) return todas;
+    if (esOperario()) return ['Control PC', 'Censo Enfermedades', 'Monitoreo Plagas', 'Control Strategus'];
     const suya = sesion.lider && sesion.lider.labor;
     return todas.includes(suya) ? [suya].concat(todas.includes('Otra labor') ? ['Otra labor'] : []) : todas;
   }
+  function esConsulta() { return !!(sesion && sesion.lider && /consulta/i.test(sesion.lider.notas || '')); }
+  function esOperario() { return !!(sesion && sesion.lider && /operario/i.test(sesion.lider.notas || '')); }
+  function soloMarca() { return esConsulta() || esOperario(); }   // no reporta labor ni novedades
   function veTodo() { return !!(sesion && sesion.lider && (/coordinador/i.test(sesion.lider.labor + ' ' + sesion.lider.nombre) || /cualquier/i.test(sesion.lider.notas || ''))); }
   function estados() { return (sesion.estados && sesion.estados.length) ? sesion.estados : ['Terminado', 'En avance', 'Revisión']; }
   function tipos() { return (sesion.tipos && sesion.tipos.length) ? sesion.tipos : ['Foco PC', 'Plaga', 'Strategus', 'Clima / día perdido', 'Seguridad', 'Otro']; }
@@ -241,31 +246,35 @@
     // conservar lo que ya se escribió
     const previo = {};
     d.querySelectorAll('.detalle-fila').forEach((f) => {
-      previo[f.dataset.id] = { tramo: f.querySelector('[name=tramo]').value, cantidad: (f.querySelector('[name=cantidad]') || {}).value };
+      previo[f.dataset.id] = { tramo: (f.querySelector('[name=tramo]') || {}).value, cantidad: (f.querySelector('[name=cantidad]') || {}).value };
     });
     d.innerHTML = '';
     d.hidden = fl.lotes.length === 0;
     fl.lotes.forEach((id) => {
       const l = lotePorId(id); if (!l) return;
-      const f = el('div', { class: 'detalle-fila' + (etiqueta ? '' : ' sin-cantidad'), 'data-id': id });
+      const soloVer = soloMarca();
+      const f = el('div', { class: 'detalle-fila' + (etiqueta && !soloVer ? '' : ' sin-cantidad'), 'data-id': id });
       const p = previo[id] || {};
       f.innerHTML =
         '<div class="detalle-lote" title="' + l.id + '">' + loteCorto(l.lote) + '</div>' +
-        '<label class="campo"><span>Líneas</span><input name="tramo" type="text" autocomplete="off" placeholder="Ej: 1 a 56"></label>' +
-        (etiqueta ? '<label class="campo"><span>' + etiqueta + '</span><input name="cantidad" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></label>' : '');
-      f.querySelector('[name=tramo]').value = p.tramo || '';
-      if (etiqueta && p.cantidad) f.querySelector('[name=cantidad]').value = p.cantidad;
+        (soloVer ? '' : '<label class="campo"><span>Líneas</span><input name="tramo" type="text" autocomplete="off" placeholder="Ej: 1 a 56"></label>' +
+        (etiqueta ? '<label class="campo"><span>' + etiqueta + '</span><input name="cantidad" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></label>' : ''));
+      if (!soloVer) {
+        f.querySelector('[name=tramo]').value = p.tramo || '';
+        if (etiqueta && p.cantidad) f.querySelector('[name=cantidad]').value = p.cantidad;
+      }
       const labor = $('l-labor').value;
       if (LISTA[labor]) {
         const lista = listaDe(labor, id);
         const b = el('button', { type: 'button', class: 'detalle-casos', 'data-id': id });
         if (!lista) { b.classList.add('vacio'); b.textContent = casos ? 'Sin listado para este lote' : 'Sin listado: actualice los casos con señal'; }
-        else if (!lista.length) { b.classList.add('vacio'); b.textContent = LISTA[labor] === 'st' ? 'Sin palmas pendientes en el listado' : 'Sin palmas con PC en el sistema'; }
+        else if (!lista.length && !eqDe(labor, id).length) { b.classList.add('vacio'); b.textContent = (LISTA[labor] === 'st' ? 'Sin palmas en el listado' : 'Sin palmas con PC en el sistema') + ' · toque para anotar una'; }
         else {
           const k = pendientesM(marcasDe(labor, id)).length;
           const tl = LISTA[labor];
           const sinCir = tl === 'pc' ? lista.filter((x) => x[2] > 0).length : tl === 'st' ? lista.filter((x) => x[3] !== 0).length : -1;
-          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (sinCir >= 0 ? ' · ' + sinCir + (tl === 'st' ? ' sin control' : ' sin cirugía') : '') + (k ? ' · ✓ ' + k + ' ' + MARCA[LISTA[labor]] : '');
+          const ne = eqNoMias(labor, id).length;
+          b.textContent = '📋 Ver listado: ' + lista.length + ' palmas' + (sinCir >= 0 ? ' · ' + sinCir + (tl === 'st' ? ' sin control' : ' sin cirugía') : '') + (k ? ' · ✓ ' + k + ' ' + (esConsulta() ? 'marcadas' : marcaTxt(labor)) : '') + (ne ? ' · 👥 ' + ne + ' del equipo' : '');
         }
         f.appendChild(b);
       }
@@ -292,12 +301,13 @@
   });
   $('l-labor').addEventListener('change', () => { pintarLotes(); pintarDetalle(); pintarStrat(); });
   $('l-detalle').addEventListener('click', (ev) => {
-    const b = ev.target.closest('.detalle-casos'); if (!b || b.classList.contains('vacio')) return;
+    const b = ev.target.closest('.detalle-casos'); if (!b) return;
     abrirCasos($('l-labor').value, b.dataset.id);
   });
 
   $('f-labor').addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (soloMarca()) return;
     const err = $('l-error');
     const fecha = $('l-fecha').value;
     const labor = $('l-labor').value;
@@ -329,7 +339,13 @@
         marcadas[l.id] = pend;
         palmas = pend.join(',');
         const extra = pend.filter((k) => mm.m[k].x).map((k) => 'L' + k.replace('-', '-P'));
-        if (extra.length) obsLote = (obs ? obs + ' · ' : '') + ({ pc: 'Cirugías fuera de la lista: ', sis: 'Palmas nuevas con PC: ', st: 'Strategus fuera de la lista: ' })[LISTA[labor]] + extra.join(', ');
+        if (extra.length) obsLote = (obs ? obs + ' · ' : '') + (labor === 'Monitoreo Plagas' ? 'Palmas con plaga fuera de la lista: ' : ({ pc: 'Cirugías fuera de la lista: ', sis: 'Palmas nuevas con PC: ', st: 'Strategus fuera de la lista: ' })[LISTA[labor]]) + extra.join(', ');
+        const deEq = pend.filter((k) => mm.m[k].eq).map((k) => mm.m[k].eq);
+        if (deEq.length) {
+          const quien = {};
+          deEq.forEach((n) => { quien[n] = (quien[n] || 0) + 1; });
+          obsLote = (obsLote ? obsLote + ' · ' : '') + 'Marcas del equipo: ' + Object.keys(quien).map((n) => n + ' ' + quien[n]).join(', ');
+        }
       }
       return {
         uid: uid(), tipo: 'registro', fecha: fecha, labor: labor, lote: l.id, estado: fl.estado,
@@ -357,7 +373,7 @@
       }
       return '<b>' + esc(nom) + '</b><br>' + esc(it.estado) + (etiqueta ? ', ' + it.cantidad + ' ' + etiqueta.toLowerCase() : '') +
         (it.tramo ? ', líneas ' + esc(it.tramo) : '') +
-        (nm ? '<br>' + nm + ' palmas ' + MARCA[LISTA[labor]] + ' en el listado' : '');
+        (nm ? '<br>' + nm + ' palmas ' + marcaTxt(labor) + ' en el listado' : '');
     });
     const okConf = await confirmar(labor + ', ' + fechaCorta(fecha), lineasConf, avisos);
     if (!okConf) return;
@@ -385,8 +401,26 @@
 
   // ---------- Listado de casos por lote (línea - palma) ----------
   // Control PC: palmas con PC del último censo sin cirugía en esta ronda. Censo: todas las palmas con PC en el sistema.
-  const LISTA = { 'Control PC': 'pc', 'Censo Enfermedades': 'sis', 'Control Strategus': 'st' };
-  const MARCA = { pc: 'con cirugía', sis: 'revisadas', st: 'controladas' };
+  const LISTA = { 'Control PC': 'pc', 'Censo Enfermedades': 'sis', 'Control Strategus': 'st', 'Monitoreo Plagas': 'st' };
+  const MARCA_LAB = { 'Control PC': 'con cirugía', 'Censo Enfermedades': 'revisadas', 'Control Strategus': 'controladas', 'Monitoreo Plagas': 'verificadas' };
+  function marcaTxt(labor) { return MARCA_LAB[labor] || 'marcadas'; }
+  // Marcas de los operarios que llegaron al libro (MARCAS EQUIPO): [línea, palma, persona, 'dd/mm', nueva]
+  function eqDe(labor, id) { const e = casos && casos.datos && casos.datos.eq; return (e && e[labor] && e[labor][id]) || []; }
+  function yo() { return sesion && sesion.lider ? sesion.lider.nombre : ''; }
+  function eqNoMias(labor, id) {
+    const mm = marcasDe(labor, id);
+    return eqDe(labor, id).filter((x) => x[2] !== yo() && !mm.m[x[0] + '-' + x[1]]);
+  }
+  function hoyMarcadas(labor) {
+    const ini = new Date(hoy() + 'T00:00:00').getTime();
+    let n = 0;
+    Object.keys(marcas).forEach((k) => {
+      if (k.split('|')[0] !== labor) return;
+      const mm = marcas[k];
+      Object.keys(mm.m).forEach((p) => { if ((mm.m[p].t || 0) >= ini) n++; });
+    });
+    return n;
+  }
   const DIAS_MARCAS = 15;
   let casos = leer(K.casos, null);      // { hora, datos }
   let marcas = leer(K.marcas, {});      // 'labor|lote' -> { censo, t0, m: { 'línea-palma': { s: 0 marcada | 1 enviada, x: 1 si se agregó a mano } } }
@@ -398,12 +432,19 @@
     const box = $('semana');
     const S = casos && casos.datos && casos.datos.semana;
     if (!S || !S.labores || !S.labores.length) { box.hidden = true; return; }
-    const lab = veTodo() ? ($('l-labor').value || S.labores[0].labor) : sesion.lider.labor;
-    const o = S.labores.find((x) => x.labor === lab) || (veTodo() ? null : S.labores[0]);
+    const libre = veTodo() || esOperario();
+    const lab = libre ? ($('l-labor').value || S.labores[0].labor) : sesion.lider.labor;
+    const o = S.labores.find((x) => x.labor === lab) || (libre ? null : S.labores[0]);
     if (!o) { box.hidden = true; return; }
     box.hidden = false;
     const pc = o.labor === 'Control PC';
     let h = '<div class="sem-cab"><b>' + esc(o.labor) + (o.mes ? ' · ' + esc(o.mes) : '') + '</b></div>';
+    if (esOperario()) {
+      const n = hoyMarcadas(o.labor);
+      h += '<div class="sem-fila grande sem-mio"><span>Hoy usted marcó</span><b>' + n + (n === 1 ? ' palma' : ' palmas') +
+        (o.labor === 'Control PC' ? ' <small>(meta: ' + num(o.meta || 40, 0) + ' cirugías)</small>' : '') + '</b></div>';
+      h += '<hr class="sem-sep">';
+    }
     let clase = '';
     if (o.programadoMes !== undefined) {
       h += '<div class="sem-fila"><span>Meta al cierre de esta semana (sáb ' + esc(S.sabado || S.hasta) + ')</span><b>' + Math.round((o.esperadoCierre || 0) * 100) + ' % = ' + num(o.metaCierreHa, 0) + ' ha</b></div>';
@@ -438,7 +479,7 @@
     h += '<p class="sem-estado">' + (S.diasTranscurridos ? 'Cuenta lo aprobado por el coordinador' : 'La semana empieza el lunes ' + esc(S.desde) + '. ¡Buena semana!') + '</p>';
     box.innerHTML = h;
   }
-  $('l-labor').addEventListener('change', () => { if (veTodo()) pintarSemana(); });
+  $('l-labor').addEventListener('change', () => { if (veTodo() || esOperario()) pintarSemana(); });
 
   async function cargarCasos() {
     if (!navigator.onLine || !sesion || !urlPuente()) return false;
@@ -491,20 +532,35 @@
     const lista = filasDe(d, tipo);
     const ya = {};
     lista.forEach((x) => { ya[x[0] + '-' + x[1]] = 1; });
-    const extras = Object.keys(mm.m).filter((k) => mm.m[k].x && !ya[k]).map((k) => k.split('-').map(Number).concat([-1]));
+    const extras = Object.keys(mm.m).filter((k) => mm.m[k].x && !ya[k]).map((k) => { ya[k] = 1; return k.split('-').map(Number).concat([-1]); });
+    // marcas del equipo: quién marcó cada palma (las nuevas fuera de lista también se muestran)
+    const eq = {};
+    eqDe(labor, id).forEach((x) => {
+      const k = x[0] + '-' + x[1];
+      (eq[k] = eq[k] || []).push(x[2] + ' ' + x[3]);
+      if (!ya[k]) { ya[k] = 1; extras.push([x[0], x[1], -1]); }
+    });
+    const eqOtros = eqNoMias(labor, id);
     const todas = lista.concat(extras);
     const porLinea = {};
     todas.forEach((x) => { (porLinea[x[0]] = porLinea[x[0]] || []).push(x); });
     const hechas = todas.filter((x) => mm.m[x[0] + '-' + x[1]]).length;
+    const deEquipo = todas.filter((x) => { const k = x[0] + '-' + x[1]; return !mm.m[k] && eq[k]; }).length;
 
-    $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : esST ? 'Control Strategus' : 'Censo');
-    $('casos-sub').textContent = esPC ? (casos.datos.pcFuente === 'PC LIDERES' ? 'Palmas con PC reportadas (listado oficial SIGAIND)' : 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—'))
-                               : esST ? 'Censo de plagas · todas las palmas con Strategus del lote'
+    $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + labor;
+    $('casos-sub').textContent = esPC ? (casos && casos.datos.pcFuente === 'PC LIDERES' ? 'Palmas con PC reportadas (listado oficial SIGAIND)' : 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—'))
+                               : esST ? (labor === 'Monitoreo Plagas' ? 'Censo de plagas · palmas con Strategus del lote para verificar' : 'Censo de plagas · todas las palmas con Strategus del lote')
                                       : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
-    $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + MARCA[tipo];
+    $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + (esConsulta() ? 'marcadas en mi lista' : marcaTxt(labor) + (esOperario() ? ' por usted' : '')) +
+      (deEquipo ? ' · 👥 ' + deEquipo + ' del equipo' : '');
+    const bEq = $('casos-equipo');
+    bEq.hidden = soloMarca() || !eqOtros.length;
+    bEq.textContent = 'Incluir en mi reporte las ' + eqOtros.length + ' marcadas por el equipo';
     $('casos-ley').textContent = esPC ? '★ reincidente o grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero · borde oscuro: sin control · gris: ya controlada, revisar'
                                       : '★ grave · punteado: cirugía sin censo · ✎ posible error de escritura: dar de alta';
-    $('casos-nueva-txt').textContent = esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
+    $('casos-nueva-txt').textContent = esConsulta() ? 'Palma que no está en la lista: escriba línea y palma para anotarla en su lista. Avísele al líder.'
+                                     : esOperario() ? 'Palma que no está en la lista: escriba línea y palma. Le llega al líder como palma nueva.'
+                                     : labor === 'Monitoreo Plagas' ? 'Palma con plaga que no está en la lista: escriba línea y palma. Se reporta en observaciones.' : esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
                                      : esST ? 'Palma con Strategus que no está en la lista: escriba línea y palma. Se reporta en observaciones.'
                                             : 'Palma nueva con PC: escriba línea y palma. Se reporta en observaciones.';
     const ocultar = $('casos-ocultar').checked;
@@ -528,7 +584,10 @@
         if (tipo === 'sis' && x[2] === 3) cls += ' error';
         if (x[2] === -1) cls += ' extra';
         if (st) cls += st.s === 1 ? ' enviada' : ' hecha';
-        cont.appendChild(el('button', { type: 'button', class: cls, 'data-k': k, 'aria-label': 'Línea ' + x[0] + ' palma ' + x[1], text: String(x[1]) }));
+        else if (eq[k]) cls += eq[k].some((q) => q.indexOf(yo() + ' ') === 0) ? ' enviada' : ' equipo';
+        const b = el('button', { type: 'button', class: cls, 'data-k': k, 'aria-label': 'Línea ' + x[0] + ' palma ' + x[1], text: String(x[1]) });
+        if (eq[k]) b.title = 'Marcada por ' + eq[k].join(', ');
+        cont.appendChild(b);
         pintadas++;
       });
       fila.appendChild(cont);
@@ -544,11 +603,26 @@
   $('casos-cuerpo').addEventListener('click', (ev) => {
     const b = ev.target.closest('.palma'); if (!b) return;
     const mm = marcasDe(abierto.labor, abierto.id), k = b.dataset.k;
-    if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
-    if (mm.m[k]) { if (mm.m[k].x) delete mm.m[k]; else delete mm.m[k]; }
-    else mm.m[k] = { s: 0 };
+    const eqK = eqDe(abierto.labor, abierto.id).filter((x) => x[0] + '-' + x[1] === k);
+    const mia = eqK.some((x) => x[2] === yo());
+    if (esOperario()) {
+      if ((mm.m[k] && mm.m[k].s === 1) || (!mm.m[k] && mia)) {
+        if (!confirm('¿Quitar su marca de la línea ' + k.replace('-', ', palma ') + '? Se le avisa al libro.')) return;
+        anularMarca(abierto.labor, abierto.id, k);
+        delete mm.m[k]; guardarMarca(mm); pintarCasos(); pintarSemana(); return;
+      }
+      const otros = eqK.filter((x) => x[2] !== yo());
+      if (!mm.m[k] && otros.length) return avisar('Ya la marcó ' + otros.map((x) => x[2] + ' el ' + x[3]).join(', ') + '.');
+    } else if (mm.m[k] && mm.m[k].s === 1) return avisar('Esa palma ya se envió en un reporte.');
+    if (mm.m[k]) delete mm.m[k];
+    else {
+      mm.m[k] = { s: 0, t: Date.now() };
+      const otro = eqK.find((x) => x[2] !== yo());
+      if (otro && !soloMarca()) { mm.m[k].eq = otro[2]; if (otro[4]) mm.m[k].x = 1; }
+    }
     guardarMarca(mm);
     pintarCasos();
+    if (esOperario()) pintarSemana();
   });
   $('casos-ocultar').addEventListener('change', pintarCasos);
   $('casos-agregar').addEventListener('click', () => {
@@ -559,21 +633,53 @@
     const d = datosLote(abierto.id) || {};
     const lista = filasDe(d, LISTA[abierto.labor]);
     const enLista = lista.some((x) => x[0] === ln && x[1] === pm);
-    mm.m[k] = enLista ? { s: 0 } : { s: 0, x: 1 };
+    mm.m[k] = enLista ? { s: 0, t: Date.now() } : { s: 0, x: 1, t: Date.now() };
     guardarMarca(mm);
     $('casos-nl').value = ''; $('casos-np').value = '';
     avisar(enLista ? 'Esa palma ya estaba en la lista: quedó marcada.' : 'Palma agregada: línea ' + ln + ', palma ' + pm + '.');
     pintarCasos();
+    if (esOperario()) pintarSemana();
   });
+  // Líder: pasa a su reporte las palmas que marcó el equipo
+  $('casos-equipo').addEventListener('click', () => {
+    const mm = marcasDe(abierto.labor, abierto.id);
+    const otros = eqNoMias(abierto.labor, abierto.id);
+    otros.forEach((x) => { const o = { s: 0, t: Date.now(), eq: x[2] }; if (x[4]) o.x = 1; mm.m[x[0] + '-' + x[1]] = o; });
+    guardarMarca(mm);
+    avisar(otros.length + ' palmas del equipo quedaron marcadas para su reporte.');
+    pintarCasos();
+  });
+  // Operario: lo marcado se envía al libro (MARCAS EQUIPO) al cerrar el listado
+  function enviarMarcasOperario(labor, id) {
+    const mm = marcasDe(labor, id);
+    const pend = pendientesM(mm);
+    if (!pend.length) return 0;
+    const l = lotePorId(id);
+    const lista = pend.filter((k) => !mm.m[k].x), nuevas = pend.filter((k) => mm.m[k].x);
+    cola.push({ uid: uid(), tipo: 'marca', accion: 'marcar', fecha: hoy(), labor: labor, lote: id, palmas: lista.join(','), nuevas: nuevas.join(','),
+      _txt: 'Marcas ' + labor + ', ' + proyectoCorto(l.proyecto) + ' lote ' + loteCorto(l.lote), _sub: fechaCorta(hoy()) + ', ' + pend.length + (pend.length === 1 ? ' palma' : ' palmas'), _creado: Date.now() });
+    pend.forEach((k) => { mm.m[k].s = 1; });
+    marcas[claveM(labor, id)] = mm;
+    guardar(K.marcas, marcas); guardar(K.cola, cola);
+    pintarEstado(); enviar();
+    return pend.length;
+  }
+  function anularMarca(labor, id, k) {
+    const l = lotePorId(id);
+    cola.push({ uid: uid(), tipo: 'marca', accion: 'anular', fecha: hoy(), labor: labor, lote: id, palmas: k, nuevas: '',
+      _txt: 'Quitar marca ' + labor + ', ' + proyectoCorto(l.proyecto) + ' lote ' + loteCorto(l.lote), _sub: 'Línea ' + k.replace('-', ', palma '), _creado: Date.now() });
+    guardar(K.cola, cola); pintarEstado(); enviar();
+  }
   $('casos-listo').addEventListener('click', () => {
     const labor = abierto.labor, id = abierto.id;
     const pend = pendientesM(marcasDe(labor, id));
+    if (esOperario()) { const n = enviarMarcasOperario(labor, id); if (n) avisar(n + (n === 1 ? ' palma marcada' : ' palmas marcadas') + '. Se envían al libro.'); pintarSemana(); }
     $('casos').close();
     abierto = null;
     pintarDetalle();
     // llena cirugías y líneas con lo marcado (se puede corregir a mano)
     const f = $('l-detalle').querySelector('.detalle-fila[data-id="' + CSS.escape(id) + '"]');
-    if (f && pend.length) {
+    if (f && pend.length && !soloMarca()) {
       const ls = pend.map((k) => Number(k.split('-')[0]));
       const tr = f.querySelector('[name=tramo]');
       if (!tr.value) tr.value = Math.min.apply(null, ls) + ' a ' + Math.max.apply(null, ls);
@@ -581,7 +687,7 @@
       if (ca && LISTA[labor] === 'pc') ca.value = pend.length;
     }
   });
-  $('casos').addEventListener('cancel', () => { abierto = null; pintarDetalle(); });
+  $('casos').addEventListener('cancel', () => { if (abierto && esOperario()) enviarMarcasOperario(abierto.labor, abierto.id); abierto = null; pintarDetalle(); });
 
   // Strategus: lotes con presencia por controlar, por prioridad (toque para elegir el lote)
   function pintarStrat() {
@@ -678,7 +784,7 @@
   }
 
   async function enviar(forzar) {
-    if (enviando || !sesion || !urlPuente()) return;
+    if (enviando || !sesion || !urlPuente() || esConsulta()) return;
     if (forzar) cola.forEach((it) => delete it._error);
     const lote = cola.filter((it) => !it._error).slice(0, 40);
     if (!lote.length) { pintarEstado(); return; }
@@ -773,6 +879,12 @@
   });
   $('estado-envio').addEventListener('click', () => {
     if (ultimoFallo === 'pin') return pedirPinNuevo();
+    if (esOperario()) {
+      const err = cola.filter((it) => it._error);
+      if (err.length) return alert(err.map((it) => it._txt + ': ' + it._error).join('\n'));
+      if (cola.length) { avisar('Enviando ' + cola.length + '…'); enviar(true); } else avisar('Todas sus marcas llegaron al libro.');
+      return;
+    }
     irA('envios');
     if (cola.length) enviar(true);
   });
@@ -835,7 +947,9 @@
   // ---------- Arranque ----------
   function pintarCabecera() {
     $('lider-nombre').textContent = sesion.lider.nombre;
-    $('lider-labor').textContent = sesion.lider.labor;
+    $('lider-labor').textContent = esOperario() ? 'Operario · ' + sesion.lider.labor : sesion.lider.labor + (esConsulta() ? ' · solo consulta' : '');
+    document.body.classList.toggle('consulta', soloMarca());
+    document.body.classList.toggle('operario', esOperario());
     const co = esCoord();
     $('tab-equipo').hidden = !co;
     document.querySelector('.pestanas').classList.toggle('cuatro', co);
@@ -885,6 +999,24 @@
         c.innerHTML = h;
         box.appendChild(c);
       });
+      if (r.operarios && r.operarios.length) {
+        const conM = r.operarios.filter((o) => o.total).length;
+        box.appendChild(el('h2', { class: 'envios-titulo' }, 'Operarios: palmas marcadas en la app <small>' + conM + ' de ' + r.operarios.length + ' con marcas</small>'));
+        r.operarios.forEach((o) => {
+          const c = el('div', { class: 'eq-card eq-op' + (o.total ? '' : ' eq-vacio') });
+          const pc = o.lotes.filter((L) => L.labor === 'Control PC').reduce((t, L) => t + L.n, 0);
+          let h = '<div class="eq-cab"><b>' + esc(o.nombre) + '</b><span>' + esc(o.labor || '') + '</span><span class="eq-n">' +
+            (o.total ? o.total + (o.total === 1 ? ' palma' : ' palmas') : 'Sin marcas') + '</span></div>';
+          if (pc) h += '<p class="eq-palmas' + (pc >= (r.metaCirugias || 40) ? '' : ' eq-bajo') + '">Control PC: ' + pc + ' de ' + (r.metaCirugias || 40) + ' cirugías (meta)</p>';
+          o.lotes.forEach((L) => {
+            h += '<div class="eq-item"><div><b>' + esc(nombreLote(L.lote)) + '</b> <span class="eq-lab">' + esc(L.labor) + '</span>' +
+              (L.dobles ? ' <span class="eq-tag">' + L.dobles + ' también marcadas por otro</span>' : '') + '</div><small>' +
+              [L.n + (L.n === 1 ? ' palma' : ' palmas'), L.tramo ? 'líneas ' + L.tramo : '', L.nuevas ? L.nuevas + ' fuera de lista' : ''].filter(String).map(esc).join(' · ') + '</small></div>';
+          });
+          c.innerHTML = h;
+          box.appendChild(c);
+        });
+      }
     } catch (e) { box.innerHTML = '<p class="form-error">No hubo respuesta. Intente de nuevo.</p>'; eqCargado = ''; }
   }
   $('eq-buscar').addEventListener('click', async () => {
