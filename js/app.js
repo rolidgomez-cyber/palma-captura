@@ -498,11 +498,11 @@
     const hechas = todas.filter((x) => mm.m[x[0] + '-' + x[1]]).length;
 
     $('casos-titulo').textContent = proyectoCorto(l.proyecto) + ' · Lote ' + loteCorto(l.lote) + ' — ' + (esPC ? 'Control PC' : esST ? 'Control Strategus' : 'Censo');
-    $('casos-sub').textContent = esPC ? 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—')
+    $('casos-sub').textContent = esPC ? (casos.datos.pcFuente === 'PC LIDERES' ? 'Palmas con PC reportadas (listado oficial SIGAIND)' : 'Palmas con PC en el sistema (censo y control) · último censo ' + (d.censo || '—'))
                                : esST ? 'Censo de plagas · todas las palmas con Strategus del lote'
                                       : 'Palmas con PC en el sistema · último censo ' + (d.censo || '—');
     $('casos-cuenta').textContent = hechas + ' de ' + todas.length + ' palmas ' + MARCA[tipo];
-    $('casos-ley').textContent = esPC ? '★ grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero · borde oscuro: sin control · gris: ya controlada, revisar'
+    $('casos-ley').textContent = esPC ? '★ reincidente o grave: atender primero · borde oscuro: sin cirugía en esta ronda · gris: ya con cirugía o en seguimiento, revisar' : esST ? '★ 3 o más adultos: atender primero · borde oscuro: sin control · gris: ya controlada, revisar'
                                       : '★ grave · punteado: cirugía sin censo · ✎ posible error de escritura: dar de alta';
     $('casos-nueva-txt').textContent = esPC ? 'Palma con PC que no está en la lista: escriba línea y palma. Cuenta como palma con cirugía.'
                                      : esST ? 'Palma con Strategus que no está en la lista: escriba línea y palma. Se reporta en observaciones.'
