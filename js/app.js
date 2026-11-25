@@ -1,5 +1,6 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
+ * v1.15 (24/11/2026): el número rojo de cada lote cuenta solo las palmas que FALTAN (sin control/cirugía en la ronda, sin marcar por mí ni por el equipo); si faltan 0 no sale número.
  * v1.14 (10/11/2026): la palma marcada o ya trabajada sale del listado (Deshacer / Ver también las marcadas); marcas del equipo al día al abrir el lote.
  * v1.13 (10/11/2026): PIN de operario: ve las cuatro labores, marca palmas y las marcas van al libro (MARCAS EQUIPO); el líder incluye las marcas del equipo en su reporte.
  * v1.5 (02/11/2026): Strategus por línea - palma; palmas con posible error de escritura en el listado de censo.
@@ -233,10 +234,10 @@
     lotesDe(fl.proyecto).forEach((l) => {
       const b = el('button', { type: 'button', class: 'lote', 'data-id': l.id, 'aria-pressed': String(fl.lotes.includes(l.id)),
         'aria-label': l.lote + ', ' + has(l.has) + ' hectáreas, ' + l.material });
-      const lc = listaDe($('l-labor').value, l.id);
+      const nf = faltanDe($('l-labor').value, l.id);
       b.innerHTML = '<b>' + loteCorto(l.lote) + '</b><small>' + has(l.has) + ' ha</small>' +
         (/guin/i.test(l.material) ? '<span class="marca-g" aria-hidden="true">G</span>' : '') +
-        (lc && lc.length ? '<span class="casos-n" title="palmas en el listado">' + lc.length + '</span>' : '');
+        (nf ? '<span class="casos-n" title="palmas que faltan">' + nf + '</span>' : '');
       c.appendChild(b);
     });
   }
@@ -408,6 +409,20 @@
   // Marcas de los operarios que llegaron al libro (MARCAS EQUIPO): [línea, palma, persona, 'dd/mm', nueva]
   function eqDe(labor, id) { const e = casos && casos.datos && casos.datos.eq; return (e && e[labor] && e[labor][id]) || []; }
   function yo() { return sesion && sesion.lider ? sesion.lider.nombre : ''; }
+  // v1.15: palmas que FALTAN en el lote (misma cuenta que "Faltan X de Y" del listado): sin control/cirugía en la ronda (gris),
+  // sin marcar por mí y sin marcar por el equipo. Es el número rojo del lote.
+  function faltanDe(labor, id) {
+    const t = LISTA[labor]; if (!t || !casos) return 0;
+    const d = datosLote(id); if (!d) return 0;
+    const esPC = t === 'pc', esST = t === 'st';
+    const mm = marcasDe(labor, id);
+    const eq = {};
+    eqDe(labor, id).forEach((x) => { eq[x[0] + '-' + x[1]] = 1; });
+    return filasDe(d, t).filter((x) => {
+      const k = x[0] + '-' + x[1];
+      return !mm.m[k] && !eq[k] && !((esPC && x[2] === 0) || (esST && x[3] === 0));
+    }).length;
+  }
   function eqNoMias(labor, id) {
     const mm = marcasDe(labor, id);
     return eqDe(labor, id).filter((x) => x[2] !== yo() && !mm.m[x[0] + '-' + x[1]]);
@@ -741,7 +756,7 @@
     if (esOperario()) { const n = enviarMarcasOperario(labor, id); if (n) avisar(n + (n === 1 ? ' palma marcada' : ' palmas marcadas') + '. Se envían al libro.'); pintarSemana(); }
     $('casos').close();
     abierto = null;
-    pintarDetalle();
+    pintarDetalle(); pintarLotes();
     // llena cirugías y líneas con lo marcado (se puede corregir a mano)
     const f = $('l-detalle').querySelector('.detalle-fila[data-id="' + CSS.escape(id) + '"]');
     if (f && pend.length && !soloMarca()) {
@@ -752,7 +767,7 @@
       if (ca && LISTA[labor] === 'pc') ca.value = pend.length;
     }
   });
-  $('casos').addEventListener('cancel', () => { if (abierto && esOperario()) enviarMarcasOperario(abierto.labor, abierto.id); abierto = null; pintarDetalle(); });
+  $('casos').addEventListener('cancel', () => { if (abierto && esOperario()) enviarMarcasOperario(abierto.labor, abierto.id); abierto = null; pintarDetalle(); pintarLotes(); });
 
   // Strategus: lotes con presencia por controlar, por prioridad (toque para elegir el lote)
   function pintarStrat() {
