@@ -441,3 +441,22 @@ body.consulta:not(.operario) .solo-envia { display: none !important; }
 .pr-tabla td b { color: #A63D2F; }
 .pr-tabla tr.pr-cero td { color: var(--tinta-2); }
 .pr-tabla tr.pr-sin td { color: #8A5A00; font-style: italic; }
+
+/* v1.17: Proyectos en tablas */
+.pr-vistas { display: flex; gap: 6px; margin: 4px 0 8px; }
+.pr-v { flex: 1; min-height: 44px; border: 2px solid var(--palma); background: var(--papel); color: var(--palma); font-weight: 700; border-radius: var(--radio-m); }
+.pr-v.on { background: var(--palma); color: #fff; }
+.pr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.pr-chip { min-height: 36px; padding: 0 12px; border: 2px solid var(--linea); background: var(--papel); border-radius: 999px; font-weight: 700; color: var(--tinta-2); }
+.pr-chip.on { border-color: var(--palma); background: var(--palma); color: #fff; }
+.pr-scroll { overflow-x: auto; background: var(--papel); border: 2px solid var(--linea); border-radius: var(--radio-m); }
+.pr-hoja { margin: 0; min-width: 100%; }
+.pr-hoja th, .pr-hoja td { white-space: nowrap; padding: 6px 5px; font-size: 13px; }
+.pr-hoja th { background: var(--palma); color: #fff; font-size: 12px; }
+.pr-hoja td:nth-child(n+2), .pr-hoja th:nth-child(n+2) { text-align: right; }
+.pr-hoja tr.pr-grupo td { background: #F3EFE6; font-weight: 700; text-align: left; color: var(--tinta); }
+.pr-hoja tr.pr-sub td:last-child, .pr-hoja tr.pr-tot td:last-child { text-align: right; }
+.pr-hoja tr.pr-sub td { background: #E8F0EB; font-weight: 700; color: var(--palma); }
+.pr-hoja tr.pr-tot td { background: var(--palma); color: #fff; font-weight: 700; }
+.pr-hoja tr.pr-sin td { text-align: left; }
+.pr-tarjetas { display: grid; gap: 10px; margin-top: 12px; }

@@ -1,5 +1,6 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
+ * v1.17 (26/11/2026): Proyectos con dos tablas (Lotes como la hoja LOTES | Casos activos de PC y Strategus por lote) con subtotal por proyecto, total y filtro por proyecto; tarjetas debajo sin 'solo app'; Strategus activo = sin control en el SIGAIND.
  * v1.16 (25/11/2026): pestaña Equipo (solo coordinador): bloque Proyectos con lotes, has, palmas, casos activos de PC y Strategus por proyecto y por lote (?action=coord&solo=proyectos, coordinador.gs v1.7).
  * v1.15 (24/11/2026): el número rojo de cada lote cuenta solo las palmas que FALTAN (sin control/cirugía en la ronda, sin marcar por mí ni por el equipo); si faltan 0 no sale número.
  * v1.14 (10/11/2026): la palma marcada o ya trabajada sale del listado (Deshacer / Ver también las marcadas); marcas del equipo al día al abrir el lote.
@@ -1118,42 +1119,85 @@
       pintarProyectos(pg);
     } catch (e) { nota.textContent = 'No hubo respuesta al cargar Proyectos. Toque Actualizar.'; }
   }
+  // v1.17: dos tablas (Lotes | Casos activos) con filtro por proyecto, y las tarjetas por proyecto debajo.
+  // Strategus activo = detectada en el último censo de plagas y sin control en el SIGAIND. PC activo = último censo enfermo (aunque tenga cirugía).
+  let prVista = 'lotes', prFiltro = '', prUlt = null;
+  const stAct = (st) => st.palmas - st.sig;
   function pintarProyectos(pg) {
-    const r = pg.datos, box = $('pr-lista');
+    prUlt = pg;
+    const r = pg.datos;
     $('pr-resumen').textContent = 'Censo hasta ' + (r.censoHasta || '—') + ' · controles hasta ' + (r.controlHasta || '—') + ' · actualizado ' +
       new Date(pg.hora).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    box.innerHTML = '';
-    r.proyectos.forEach((g) => {
-      const d = el('details', { class: 'pr-card' });
-      const pc = g.pc, st = g.st;
-      let h = '<summary><div class="pr-cab"><b>' + esc(proyectoCorto(g.proyecto)) + '</b><span>' + g.lotes + ' lotes · ' + has(g.has) + ' ha · ' +
+    const grupos = r.proyectos.filter((g) => !prFiltro || g.proyecto === prFiltro);
+    // botones: vista y proyecto
+    let h = '<div class="pr-vistas" role="tablist">' +
+      [['lotes', 'Lotes'], ['casos', 'Casos activos']].map((v) => '<button type="button" class="pr-v' + (prVista === v[0] ? ' on' : '') + '" data-v="' + v[0] + '">' + v[1] + '</button>').join('') +
+      '</div><div class="pr-chips">' +
+      [''].concat(r.proyectos.map((g) => g.proyecto)).map((p) => '<button type="button" class="pr-chip' + (prFiltro === p ? ' on' : '') + '" data-p="' + esc(p) + '">' +
+        (p ? esc(proyectoCorto(p)) : 'Todos') + '</button>').join('') + '</div>';
+    const tot = { lotes: 0, has: 0, palmas: 0, pc: 0, st: 0 };
+    if (prVista === 'lotes') {
+      h += '<div class="pr-scroll"><table class="pr-tabla pr-hoja"><thead><tr><th>Lote</th><th>Has</th><th>Palmas</th><th>Material</th><th>Siembra</th></tr></thead><tbody>';
+      grupos.forEach((g) => {
+        h += '<tr class="pr-grupo"><td colspan="5">' + esc(proyectoCorto(g.proyecto)) + '</td></tr>';
+        g.detalle.forEach((o) => {
+          const l = lotePorId(o.id) || {};
+          h += '<tr><td>' + esc(loteCorto(o.lote)) + '</td><td>' + num(o.has, 2) + '</td><td>' + num(o.palmas, 0) + '</td>' +
+            '<td>' + esc(l.material || '') + '</td><td>' + esc(l.siembra || '') + '</td></tr>';
+        });
+        h += '<tr class="pr-sub"><td>' + g.lotes + ' lotes</td><td>' + num(g.has, 2) + '</td><td>' + num(g.palmas, 0) + '</td><td colspan="2">Subtotal ' + esc(proyectoCorto(g.proyecto)) + '</td></tr>';
+        tot.lotes += g.lotes; tot.has += g.has; tot.palmas += g.palmas;
+      });
+      if (grupos.length > 1) h += '<tr class="pr-tot"><td>' + tot.lotes + ' lotes</td><td>' + num(tot.has, 2) + '</td><td>' + num(tot.palmas, 0) + '</td><td colspan="2">TOTAL</td></tr>';
+      h += '</tbody></table></div>';
+    } else {
+      h += '<div class="pr-scroll"><table class="pr-tabla pr-hoja"><thead><tr><th>Lote</th><th>Palmas</th><th>PC</th><th>% PC</th><th>Strat.</th><th>% Strat.</th></tr></thead><tbody>';
+      grupos.forEach((g) => {
+        let gpc = 0, gst = 0;
+        h += '<tr class="pr-grupo"><td colspan="6">' + esc(proyectoCorto(g.proyecto)) + '</td></tr>';
+        g.detalle.forEach((o) => {
+          const sa = stAct(o.st);
+          gpc += o.pc.activas; gst += sa;
+          if (o.sinCenso) {
+            h += '<tr class="pr-sin"><td>' + esc(loteCorto(o.lote)) + '</td><td>' + num(o.palmas, 0) + '</td><td colspan="4">Sin censo reciente (últ. ' + esc(o.ultTxt || '—') + ')</td></tr>';
+            return;
+          }
+          if (!o.pc.activas && !sa) return;   // solo los lotes con casos
+          h += '<tr><td>' + esc(loteCorto(o.lote)) + '</td><td>' + num(o.palmas, 0) + '</td>' +
+            '<td>' + (o.pc.activas ? '<b>' + num(o.pc.activas, 0) + '</b>' : '—') + '</td><td>' + (o.pc.activas ? pct(o.pc.activas, o.palmas) : '—') + '</td>' +
+            '<td>' + (sa ? '<b>' + num(sa, 0) + '</b>' : '—') + '</td><td>' + (sa ? pct(sa, o.palmas) : '—') + '</td></tr>';
+        });
+        h += '<tr class="pr-sub"><td>Subtotal</td><td>' + num(g.palmas, 0) + '</td><td>' + num(gpc, 0) + '</td><td>' + pct(gpc, g.palmas) +
+          '</td><td>' + num(gst, 0) + '</td><td>' + pct(gst, g.palmas) + '</td></tr>';
+        tot.palmas += g.palmas; tot.pc += gpc; tot.st += gst;
+      });
+      if (grupos.length > 1) h += '<tr class="pr-tot"><td>TOTAL</td><td>' + num(tot.palmas, 0) + '</td><td>' + num(tot.pc, 0) + '</td><td>' + pct(tot.pc, tot.palmas) +
+        '</td><td>' + num(tot.st, 0) + '</td><td>' + pct(tot.st, tot.palmas) + '</td></tr>';
+      h += '</tbody></table></div><p class="nota">PC activos: último censo enfermo (aunque ya tenga cirugía). Strategus: detectada en el último censo de plagas y sin control en el SIGAIND. % sobre las palmas del lote. Solo se listan lotes con casos; los subtotales usan todas las palmas del proyecto.</p>';
+    }
+    // tarjetas por proyecto (debajo)
+    h += '<div class="pr-tarjetas">';
+    grupos.forEach((g) => {
+      const pc = g.pc, st = g.st, sa = stAct(st);
+      h += '<div class="pr-card"><div class="pr-cab"><b>' + esc(proyectoCorto(g.proyecto)) + '</b><span>' + g.lotes + ' lotes · ' + num(g.has, 1) + ' ha · ' +
         num(g.palmas, 0) + ' palmas</span></div>' +
         '<div class="pr-fila"><span class="pr-et">PC</span><b>' + num(pc.activas, 0) + '</b> casos activos · ' + pct(pc.activas, g.palmas) +
-        (pc.graves ? ' · ★ ' + pc.graves : '') + '<small>Cirugía SIGAIND ' + num(pc.sig, 0) + ' · solo app ' + num(pc.app, 0) +
-        ' · <b>sin cirugía ' + num(pc.sin, 0) + '</b> · ' + pc.lotes + (pc.lotes === 1 ? ' lote' : ' lotes') + ' con PC</small></div>' +
-        '<div class="pr-fila"><span class="pr-et st">Strategus</span><b>' + num(st.palmas, 0) + '</b> palmas · ' + pct(st.palmas, g.palmas) +
-        ' · ' + num(st.adultos, 0) + ' adultos<small>Control SIGAIND ' + num(st.sig, 0) + ' · solo app ' + num(st.app, 0) +
-        ' · <b>pendientes ' + num(st.pend, 0) + '</b> · ' + st.lotes + (st.lotes === 1 ? ' lote' : ' lotes') + ' con Strategus</small></div>' +
-        (g.sinCenso ? '<p class="pr-aviso">' + g.sinCenso + (g.sinCenso === 1 ? ' lote' : ' lotes') + ' sin censo reciente (más de ' + r.diasCenso + ' días)</p>' : '') +
-        '<span class="pr-ver">Ver por lote</span></summary>';
-      h += '<table class="pr-tabla"><thead><tr><th>Lote</th><th>Ha</th><th>PC activos</th><th>Sin cirugía</th><th>Strategus</th><th>Pend.</th><th>Últ. censo</th></tr></thead><tbody>';
-      g.detalle.forEach((o) => {
-        if (o.sinCenso) {
-          h += '<tr class="pr-sin"><td>' + esc(loteCorto(o.lote)) + '</td><td>' + has(o.has) + '</td><td colspan="4">Sin censo reciente</td><td>' + esc(o.ultTxt || '—') + '</td></tr>';
-          return;
-        }
-        h += '<tr' + (o.pc.activas || o.st.palmas ? '' : ' class="pr-cero"') + '><td>' + esc(loteCorto(o.lote)) + '</td><td>' + has(o.has) + '</td>' +
-          '<td>' + (o.pc.activas ? num(o.pc.activas, 0) + ' <small>' + pct(o.pc.activas, o.palmas) + '</small>' + (o.pc.graves ? ' ★' + o.pc.graves : '') : '—') + '</td>' +
-          '<td>' + (o.pc.sin ? '<b>' + num(o.pc.sin, 0) + '</b>' : (o.pc.activas ? '0' : '—')) + '</td>' +
-          '<td>' + (o.st.palmas ? num(o.st.palmas, 0) + ' <small>' + pct(o.st.palmas, o.palmas) + '</small>' : '—') + '</td>' +
-          '<td>' + (o.st.pend ? '<b>' + num(o.st.pend, 0) + '</b>' : (o.st.palmas ? '0' : '—')) + '</td>' +
-          '<td>' + esc(o.ultTxt || '—') + '</td></tr>';
-      });
-      h += '</tbody></table><p class="nota">PC activos: último censo enfermo (aunque ya tenga cirugía). Strategus: palmas con presencia en el último censo de plagas. % sobre las palmas del lote.</p>';
-      d.innerHTML = h;
-      box.appendChild(d);
+        (pc.graves ? ' · ★ ' + pc.graves : '') + '<small>Cirugía SIGAIND ' + num(pc.sig, 0) + ' · <b>sin cirugía ' + num(pc.activas - pc.sig, 0) + '</b> · ' +
+        pc.lotes + (pc.lotes === 1 ? ' lote' : ' lotes') + ' con PC</small></div>' +
+        '<div class="pr-fila"><span class="pr-et st">Strategus</span><b>' + num(sa, 0) + '</b> palmas activas · ' + pct(sa, g.palmas) +
+        '<small>Detectadas en el censo ' + num(st.palmas, 0) + ' (' + num(st.adultos, 0) + ' adultos) · control SIGAIND ' + num(st.sig, 0) + '</small></div>' +
+        (g.sinCenso ? '<p class="pr-aviso">' + g.sinCenso + (g.sinCenso === 1 ? ' lote' : ' lotes') + ' sin censo reciente (más de ' + r.diasCenso + ' días)</p>' : '') + '</div>';
     });
+    h += '</div>';
+    $('pr-lista').innerHTML = h;
   }
+  $('pr-lista').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b || !prUlt) return;
+    if (b.dataset.v) prVista = b.dataset.v;
+    else if (b.dataset.p !== undefined) prFiltro = b.dataset.p;
+    else return;
+    pintarProyectos(prUlt);
+  });
   $('pr-cargar').addEventListener('click', cargarProyectos);
 
   $('eq-buscar').addEventListener('click', async () => {
