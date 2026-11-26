@@ -1,5 +1,6 @@
 /* Formulario de campo para líderes · Sanidad Vegetal La Sultana
  * Guarda todo en el teléfono y lo envía a la hoja cuando hay señal.
+ * v1.16 (25/11/2026): pestaña Equipo (solo coordinador): bloque Proyectos con lotes, has, palmas, casos activos de PC y Strategus por proyecto y por lote (?action=coord&solo=proyectos, coordinador.gs v1.7).
  * v1.15 (24/11/2026): el número rojo de cada lote cuenta solo las palmas que FALTAN (sin control/cirugía en la ronda, sin marcar por mí ni por el equipo); si faltan 0 no sale número.
  * v1.14 (10/11/2026): la palma marcada o ya trabajada sale del listado (Deshacer / Ver también las marcadas); marcas del equipo al día al abrir el lote.
  * v1.13 (10/11/2026): PIN de operario: ve las cuatro labores, marca palmas y las marcas van al libro (MARCAS EQUIPO); el líder incluye las marcas del equipo en su reporte.
@@ -14,7 +15,7 @@
   'use strict';
 
   const K = { cfg: 'captura_cfg', sesion: 'captura_sesion', cola: 'captura_cola', enviados: 'captura_enviados', ultimo: 'captura_ultimo',
-             casos: 'captura_casos', marcas: 'captura_marcas' };
+             casos: 'captura_casos', marcas: 'captura_marcas', proyectos: 'captura_proyectos' };
   const CANTIDAD = { 'Control PC': 'Cirugías', 'Control Strategus': 'Controles / galerías' };
   const MAX_ENVIADOS = 150;
   const LIMITE_CANTIDAD = 300;   // cirugías o controles por lote en un día
@@ -1040,6 +1041,10 @@
   let eqCargado = '';
   function nombreLote(id) { const l = lotePorId(id); return l ? proyectoCorto(l.proyecto) + ' · ' + loteCorto(l.lote) : String(id || 'Sin lote'); }
   function abrirEquipo() {
+    // v1.16: Proyectos (se guarda en el teléfono; se vuelve a pedir si tiene más de 30 minutos)
+    const pg = leer(K.proyectos, null);
+    if (pg && pg.datos) pintarProyectos(pg);
+    if (!pg || Date.now() - pg.hora > 30 * 60 * 1000) cargarProyectos();
     if (!$('eq-fecha').value) $('eq-fecha').value = hoy();
     if (!$('eq-proy').options.length) {
       $('eq-proy').innerHTML = proyectos().map((p) => '<option value="' + esc(p) + '">' + esc(proyectoCorto(p)) + '</option>').join('');
@@ -1099,6 +1104,58 @@
       }
     } catch (e) { box.innerHTML = '<p class="form-error">No hubo respuesta. Intente de nuevo.</p>'; eqCargado = ''; }
   }
+  // ---------- v1.16: Proyectos (solo coordinador) ----------
+  const pct = (n, d) => d ? (n * 100 / d).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %' : '—';
+  async function cargarProyectos() {
+    const nota = $('pr-resumen');
+    if (!navigator.onLine) { if (!leer(K.proyectos, null)) nota.textContent = 'Sin señal. Proyectos necesita conexión la primera vez.'; return; }
+    nota.textContent = 'Actualizando proyectos…';
+    try {
+      const r = await pedir(urlPuente() + '?action=coord&solo=proyectos&pin=' + encodeURIComponent(sesion.pin), null, 120000);
+      if (!r || !r.ok || !r.proyectos) { nota.textContent = (r && r.error) || 'No se pudo cargar Proyectos (¿coordinador.gs v1.7 publicado?).'; return; }
+      const pg = { hora: Date.now(), datos: r };
+      guardar(K.proyectos, pg);
+      pintarProyectos(pg);
+    } catch (e) { nota.textContent = 'No hubo respuesta al cargar Proyectos. Toque Actualizar.'; }
+  }
+  function pintarProyectos(pg) {
+    const r = pg.datos, box = $('pr-lista');
+    $('pr-resumen').textContent = 'Censo hasta ' + (r.censoHasta || '—') + ' · controles hasta ' + (r.controlHasta || '—') + ' · actualizado ' +
+      new Date(pg.hora).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    box.innerHTML = '';
+    r.proyectos.forEach((g) => {
+      const d = el('details', { class: 'pr-card' });
+      const pc = g.pc, st = g.st;
+      let h = '<summary><div class="pr-cab"><b>' + esc(proyectoCorto(g.proyecto)) + '</b><span>' + g.lotes + ' lotes · ' + has(g.has) + ' ha · ' +
+        num(g.palmas, 0) + ' palmas</span></div>' +
+        '<div class="pr-fila"><span class="pr-et">PC</span><b>' + num(pc.activas, 0) + '</b> casos activos · ' + pct(pc.activas, g.palmas) +
+        (pc.graves ? ' · ★ ' + pc.graves : '') + '<small>Cirugía SIGAIND ' + num(pc.sig, 0) + ' · solo app ' + num(pc.app, 0) +
+        ' · <b>sin cirugía ' + num(pc.sin, 0) + '</b> · ' + pc.lotes + (pc.lotes === 1 ? ' lote' : ' lotes') + ' con PC</small></div>' +
+        '<div class="pr-fila"><span class="pr-et st">Strategus</span><b>' + num(st.palmas, 0) + '</b> palmas · ' + pct(st.palmas, g.palmas) +
+        ' · ' + num(st.adultos, 0) + ' adultos<small>Control SIGAIND ' + num(st.sig, 0) + ' · solo app ' + num(st.app, 0) +
+        ' · <b>pendientes ' + num(st.pend, 0) + '</b> · ' + st.lotes + (st.lotes === 1 ? ' lote' : ' lotes') + ' con Strategus</small></div>' +
+        (g.sinCenso ? '<p class="pr-aviso">' + g.sinCenso + (g.sinCenso === 1 ? ' lote' : ' lotes') + ' sin censo reciente (más de ' + r.diasCenso + ' días)</p>' : '') +
+        '<span class="pr-ver">Ver por lote</span></summary>';
+      h += '<table class="pr-tabla"><thead><tr><th>Lote</th><th>Ha</th><th>PC activos</th><th>Sin cirugía</th><th>Strategus</th><th>Pend.</th><th>Últ. censo</th></tr></thead><tbody>';
+      g.detalle.forEach((o) => {
+        if (o.sinCenso) {
+          h += '<tr class="pr-sin"><td>' + esc(loteCorto(o.lote)) + '</td><td>' + has(o.has) + '</td><td colspan="4">Sin censo reciente</td><td>' + esc(o.ultTxt || '—') + '</td></tr>';
+          return;
+        }
+        h += '<tr' + (o.pc.activas || o.st.palmas ? '' : ' class="pr-cero"') + '><td>' + esc(loteCorto(o.lote)) + '</td><td>' + has(o.has) + '</td>' +
+          '<td>' + (o.pc.activas ? num(o.pc.activas, 0) + ' <small>' + pct(o.pc.activas, o.palmas) + '</small>' + (o.pc.graves ? ' ★' + o.pc.graves : '') : '—') + '</td>' +
+          '<td>' + (o.pc.sin ? '<b>' + num(o.pc.sin, 0) + '</b>' : (o.pc.activas ? '0' : '—')) + '</td>' +
+          '<td>' + (o.st.palmas ? num(o.st.palmas, 0) + ' <small>' + pct(o.st.palmas, o.palmas) + '</small>' : '—') + '</td>' +
+          '<td>' + (o.st.pend ? '<b>' + num(o.st.pend, 0) + '</b>' : (o.st.palmas ? '0' : '—')) + '</td>' +
+          '<td>' + esc(o.ultTxt || '—') + '</td></tr>';
+      });
+      h += '</tbody></table><p class="nota">PC activos: último censo enfermo (aunque ya tenga cirugía). Strategus: palmas con presencia en el último censo de plagas. % sobre las palmas del lote.</p>';
+      d.innerHTML = h;
+      box.appendChild(d);
+    });
+  }
+  $('pr-cargar').addEventListener('click', cargarProyectos);
+
   $('eq-buscar').addEventListener('click', async () => {
     const out = $('eq-palma'), id = $('eq-lote').value, l = $('eq-l').value, p = $('eq-p').value;
     out.hidden = false;

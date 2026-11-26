@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=1.15">
+<link rel="stylesheet" href="css/app.css?v=1.16">
 </head>
 <body>
 
@@ -161,6 +161,11 @@
 
     <!-- ---------- EQUIPO (solo coordinador) ---------- -->
     <section class="panel" data-panel="equipo" hidden>
+      <div class="pr-titulo"><h2 class="envios-titulo">Proyectos</h2><button type="button" class="btn-sec" id="pr-cargar">Actualizar</button></div>
+      <p class="eq-resumen" id="pr-resumen"></p>
+      <div id="pr-lista" class="pr-lista"></div>
+
+      <h2 class="envios-titulo">Reportes del equipo</h2>
       <div class="fila-2">
         <label class="campo">
           <span>Día</span>
@@ -244,6 +249,6 @@
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script src="config.js?v=1.2"></script>
-<script src="js/app.js?v=1.15"></script>
+<script src="js/app.js?v=1.16"></script>
 </body>
 </html>

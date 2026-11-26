@@ -413,3 +413,31 @@ body.consulta:not(.operario) .solo-envia { display: none !important; }
 .casos-aviso { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; padding: 8px 12px; border-radius: 10px; background: #12211A; color: #fff; font-weight: 700; font-size: 15px; }
 .casos-aviso[hidden] { display: none; }
 .casos-aviso button { flex: none; min-height: 40px; padding: 0 14px; border-radius: 8px; border: 2px solid #F5C518; background: transparent; color: #F5C518; font: inherit; font-weight: 700; }
+
+/* v1.16: Proyectos (pestaña Equipo, solo coordinador) */
+.pr-titulo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.pr-titulo .envios-titulo { margin: 0; }
+.pr-titulo .btn-sec { width: auto; min-height: 40px; padding: 0 14px; }
+.pr-lista { display: grid; gap: 10px; margin-bottom: 14px; }
+.pr-card { background: var(--papel); border: 2px solid var(--linea); border-radius: var(--radio-m); padding: 10px 12px; }
+.pr-card summary { list-style: none; cursor: pointer; }
+.pr-card summary::-webkit-details-marker { display: none; }
+.pr-cab { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.pr-cab b { font-size: 17px; }
+.pr-cab span { font-size: 13px; color: var(--tinta-2); }
+.pr-fila { border-top: 1px solid var(--linea); margin-top: 8px; padding-top: 6px; font-size: 15px; }
+.pr-fila b { font-size: 18px; }
+.pr-fila small { display: block; font-size: 13px; color: var(--tinta-2); margin-top: 2px; }
+.pr-fila small b { font-size: 13px; color: #A63D2F; }
+.pr-et { display: inline-block; min-width: 74px; margin-right: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--palma); }
+.pr-et.st { color: #8A5A00; }
+.pr-aviso { margin: 8px 0 0; font-size: 13px; color: #8A5A00; font-weight: 700; }
+.pr-ver { display: block; margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--palma); }
+.pr-card[open] .pr-ver { display: none; }
+.pr-tabla { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.pr-tabla th { text-align: left; font-size: 11px; color: var(--tinta-2); border-bottom: 2px solid var(--linea); padding: 4px 3px; }
+.pr-tabla td { border-bottom: 1px solid var(--linea); padding: 5px 3px; vertical-align: top; }
+.pr-tabla td small { color: var(--tinta-2); font-size: 11px; }
+.pr-tabla td b { color: #A63D2F; }
+.pr-tabla tr.pr-cero td { color: var(--tinta-2); }
+.pr-tabla tr.pr-sin td { color: #8A5A00; font-style: italic; }
